@@ -1,4 +1,4 @@
-import { getSupabaseClient, supabase } from './supabase';
+import { getSupabaseClient, supabase, API_BASE_URL } from './supabase';
 import type { Post } from '../types';
 import { MOCK_POSTS } from './mockData';
 
@@ -90,7 +90,7 @@ export async function fetchAllPosts(): Promise<Post[]> {
   // 2. Try Express backend API if client list is empty
   if (dbPostsList.length === 0) {
     try {
-      const res = await fetch('http://localhost:5000/api/posts');
+      const res = await fetch(`${API_BASE_URL}/api/posts`);
       if (res.ok) {
         const json = await res.json();
         if (json.posts && Array.isArray(json.posts) && json.posts.length > 0) {
@@ -159,7 +159,7 @@ export async function createPostInSupabase(
   // 2. Failsafe: Express Backend API insert (bypasses RLS issues)
   if (!savedPost) {
     try {
-      const res = await fetch('http://localhost:5000/api/posts', {
+      const res = await fetch(`${API_BASE_URL}/api/posts`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

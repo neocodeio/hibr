@@ -9,6 +9,9 @@ if (!supabaseUrl || !supabaseAnonKey) {
   );
 }
 
+/** Base URL of the Express backend API (overridable via VITE_API_URL). */
+export const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
 /**
  * Creates a Supabase client configured with Clerk JWT authentication.
  * Pass the Clerk `getToken` function to inject the JWT into Supabase requests,

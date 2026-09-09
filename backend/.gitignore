@@ -1,5 +1,13 @@
-#Logs
-.env
+# Logs
+*.log
+
+# Dependencies
 node_modules
-*.env
-supabase_schema.sql
+
+# Build output
+dist
+
+# Environment secrets — but keep the example template
+.env
+.env.*
+!.env.example

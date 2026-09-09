@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import type { ReactNode } from 'react';
 import { useUser, useAuth as useClerkAuth, useClerk } from '@clerk/clerk-react';
-import { getSupabaseClient } from './supabase';
+import { getSupabaseClient, API_BASE_URL } from './supabase';
 
 export interface UserProfile {
   id: string;
@@ -94,7 +94,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
         // 2. Failsafe: Backend API sync (runs with admin privileges)
         try {
-          await fetch('http://localhost:5000/api/users/sync', {
+          await fetch(`${API_BASE_URL}/api/users/sync`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
