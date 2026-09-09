@@ -75,7 +75,7 @@ function CreatePostModal({ isOpen, onClose, onPostCreated }: CreatePostModalProp
       setContent('');
       setIsSubmitting(false);
       onClose();
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error publishing post:', err);
       setErrorMsg('حدث خطأ أثناء نشر المقال، يرجى المحاولة مرة أخرى.');
       setIsSubmitting(false);

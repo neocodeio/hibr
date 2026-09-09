@@ -17,8 +17,24 @@ const supabaseAdmin = createClient(supabaseUrl, supabaseKey);
 
 app.use(cors({ origin: '*' }));
 
+/**
+ * Wraps async route handlers so rejections are forwarded to Express's error
+ * handling instead of leaving the request hanging (Express 4 does not catch
+ * rejected promises from async handlers on its own).
+ */
+const asyncHandler =
+  (fn: (req: express.Request, res: express.Response) => Promise<unknown>) =>
+  (req: express.Request, res: express.Response) => {
+    fn(req, res).catch((err) => {
+      console.error('❌ Unhandled route error:', err);
+      if (!res.headersSent) {
+        res.status(500).json({ error: 'Internal server error' });
+      }
+    });
+  };
+
 // Webhook endpoint requires raw body for Svix signature verification
-app.post('/api/webhooks/clerk', express.raw({ type: 'application/json' }), async (req, res) => {
+app.post('/api/webhooks/clerk', express.raw({ type: 'application/json' }), asyncHandler(async (req, res) => {
   const webhookSecret = process.env.CLERK_WEBHOOK_SECRET;
 
   if (!webhookSecret) {
@@ -85,9 +101,9 @@ app.post('/api/webhooks/clerk', express.raw({ type: 'application/json' }), async
   }
 
   return res.status(200).json({ success: true });
-});
+}));
 
-// JSON body parser for normal API endpoints
+// JSON body parser for normal API endpoints (after the raw-body webhook route)
 app.use(express.json());
 
 // Health check
@@ -96,7 +112,7 @@ app.get('/api/health', (req, res) => {
 });
 
 // Manual profile sync endpoint
-app.post('/api/users/sync', async (req, res) => {
+app.post('/api/users/sync', asyncHandler(async (req, res) => {
   const { id, email, name, avatarUrl } = req.body;
 
   if (!id || !email) {
@@ -120,10 +136,10 @@ app.post('/api/users/sync', async (req, res) => {
   }
 
   res.json({ success: true, user: data });
-});
+}));
 
 // Fetch all published posts
-app.get('/api/posts', async (req, res) => {
+app.get('/api/posts', asyncHandler(async (req, res) => {
   const { data, error } = await supabaseAdmin
     .from('posts')
     .select('*, author:users(*)')
@@ -136,10 +152,10 @@ app.get('/api/posts', async (req, res) => {
   }
 
   res.json({ posts: data });
-});
+}));
 
 // Create a new post endpoint
-app.post('/api/posts', async (req, res) => {
+app.post('/api/posts', asyncHandler(async (req, res) => {
   const { authorId, title, slug, excerpt, content, readTime, authorName } = req.body;
 
   if (!authorId || !title || !content) {
@@ -193,7 +209,7 @@ app.post('/api/posts', async (req, res) => {
 
   console.log(`✅ Post "${title}" created successfully in Supabase!`);
   res.json({ success: true, post: data });
-});
+}));
 
 app.listen(PORT, () => {
   console.log(`🚀 Hibr Backend Server running on http://localhost:${PORT}`);

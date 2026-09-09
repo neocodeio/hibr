@@ -16,15 +16,18 @@ CREATE TABLE IF NOT EXISTS public.users (
 -- Enable RLS on users
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 
--- Users RLS Policies
+-- Users RLS Policies (drop-first keeps this script re-runnable)
+DROP POLICY IF EXISTS "Users are viewable by everyone" ON public.users;
 CREATE POLICY "Users are viewable by everyone" 
   ON public.users FOR SELECT 
   USING (true);
 
+DROP POLICY IF EXISTS "Users can update their own profile" ON public.users;
 CREATE POLICY "Users can update their own profile" 
   ON public.users FOR UPDATE 
   USING (id = (auth.jwt() ->> 'sub'));
 
+DROP POLICY IF EXISTS "Users can insert their own profile" ON public.users;
 CREATE POLICY "Users can insert their own profile" 
   ON public.users FOR INSERT 
   WITH CHECK (id = (auth.jwt() ->> 'sub'));
@@ -49,19 +52,23 @@ CREATE TABLE IF NOT EXISTS public.posts (
 -- Enable RLS on posts
 ALTER TABLE public.posts ENABLE ROW LEVEL SECURITY;
 
--- Posts RLS Policies
+-- Posts RLS Policies (drop-first keeps this script re-runnable)
+DROP POLICY IF EXISTS "Published posts are viewable by everyone" ON public.posts;
 CREATE POLICY "Published posts are viewable by everyone" 
   ON public.posts FOR SELECT 
   USING (is_published = true OR author_id = (auth.jwt() ->> 'sub'));
 
+DROP POLICY IF EXISTS "Authenticated users can create posts" ON public.posts;
 CREATE POLICY "Authenticated users can create posts" 
   ON public.posts FOR INSERT 
   WITH CHECK (author_id = (auth.jwt() ->> 'sub'));
 
+DROP POLICY IF EXISTS "Authors can update their own posts" ON public.posts;
 CREATE POLICY "Authors can update their own posts" 
   ON public.posts FOR UPDATE 
   USING (author_id = (auth.jwt() ->> 'sub'));
 
+DROP POLICY IF EXISTS "Authors can delete their own posts" ON public.posts;
 CREATE POLICY "Authors can delete their own posts" 
   ON public.posts FOR DELETE 
   USING (author_id = (auth.jwt() ->> 'sub'));
@@ -77,14 +84,17 @@ CREATE TABLE IF NOT EXISTS public.likes (
 -- Enable RLS on likes
 ALTER TABLE public.likes ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Likes are viewable by everyone" ON public.likes;
 CREATE POLICY "Likes are viewable by everyone" 
   ON public.likes FOR SELECT 
   USING (true);
 
+DROP POLICY IF EXISTS "Users can insert their own likes" ON public.likes;
 CREATE POLICY "Users can insert their own likes" 
   ON public.likes FOR INSERT 
   WITH CHECK (user_id = (auth.jwt() ->> 'sub'));
 
+DROP POLICY IF EXISTS "Users can delete their own likes" ON public.likes;
 CREATE POLICY "Users can delete their own likes" 
   ON public.likes FOR DELETE 
   USING (user_id = (auth.jwt() ->> 'sub'));
@@ -101,14 +111,17 @@ CREATE TABLE IF NOT EXISTS public.comments (
 -- Enable RLS on comments
 ALTER TABLE public.comments ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Comments are viewable by everyone" ON public.comments;
 CREATE POLICY "Comments are viewable by everyone" 
   ON public.comments FOR SELECT 
   USING (true);
 
+DROP POLICY IF EXISTS "Users can post comments" ON public.comments;
 CREATE POLICY "Users can post comments" 
   ON public.comments FOR INSERT 
   WITH CHECK (user_id = (auth.jwt() ->> 'sub'));
 
+DROP POLICY IF EXISTS "Users can delete their own comments" ON public.comments;
 CREATE POLICY "Users can delete their own comments" 
   ON public.comments FOR DELETE 
   USING (user_id = (auth.jwt() ->> 'sub'));

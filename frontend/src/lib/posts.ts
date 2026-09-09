@@ -9,6 +9,7 @@ interface DbPostRow {
   title: string;
   excerpt?: string | null;
   content?: string | null;
+  published_at?: string | null;
   read_time?: number | null;
   likes_count?: number | null;
   comments_count?: number | null;
@@ -58,7 +59,7 @@ function formatDbPost(item: DbPostRow): Post {
     likesCount: item.likes_count || 0,
     commentsCount: item.comments_count || 0,
     author: {
-      id: item.author?.id || item.author_id,
+      id: item.author?.id || item.author_id || '',
       name: item.author?.name || 'كاتب حِبر',
       handle: (item.author?.name || 'author').toLowerCase().replace(/\s+/g, '-'),
     },

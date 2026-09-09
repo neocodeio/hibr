@@ -42,7 +42,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isCreatePostOpen, setIsCreatePostOpen] = useState(false);
   const [authModalMode, setAuthModalMode] = useState<'signin' | 'signup'>('signin');
-  const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
+  const pendingActionRef = useRef<(() => void) | null>(null);
 
   const isAuthenticated = Boolean(isSignedIn);
 
@@ -61,14 +61,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
   );
 
   // Execute pending action after authentication
-  const pendingActionRef = useRef(pendingAction);
-  pendingActionRef.current = pendingAction;
-
   useEffect(() => {
     if (isAuthenticated && pendingActionRef.current) {
       const action = pendingActionRef.current;
       pendingActionRef.current = null;
-      setPendingAction(null);
       action();
       setIsModalOpen(false);
     }
@@ -93,8 +89,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
             { onConflict: 'id' }
           );
         } catch {
-          console.warn('Client-side Supabase sync fallback:', 'failed');
-        }
+          // Client-side sync failed — the backend sync below acts as failsafe
         }
 
         // 2. Failsafe: Backend API sync (runs with admin privileges)
@@ -109,7 +104,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
               avatarUrl: user.avatarUrl,
             }),
           });
-        } catch (err) {
+        } catch {
           // Backend offline fallback - client sync handled it
         }
       };
@@ -120,7 +115,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const requireAuth = useCallback(
     (onSuccess?: () => void): boolean => {
       if (!isAuthenticated) {
-        if (onSuccess) setPendingAction(() => onSuccess);
+        if (onSuccess) pendingActionRef.current = onSuccess;
         setAuthModalMode('signup');
         setIsModalOpen(true);
         return false;
@@ -133,7 +128,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   const closeModal = useCallback(() => {
     setIsModalOpen(false);
-    setPendingAction(null);
+    pendingActionRef.current = null;
   }, []);
 
   const openSignInModal = useCallback(() => {
@@ -196,6 +191,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   );
 }
 
+// eslint-disable-next-line react-refresh/only-export-components -- context + hook intentionally co-located
 export function useAuth(): AuthContextValue {
   const ctx = useContext(AuthContext);
   if (!ctx) {

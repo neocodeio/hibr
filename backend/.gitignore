@@ -2,4 +2,4 @@
 .env
 node_modules
 *.env
-supabase-schema.sql
+supabase_schema.sql
