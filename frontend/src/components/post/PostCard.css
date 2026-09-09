@@ -1,0 +1,174 @@
+/* ============================================================
+   PostCard — Contained card layout
+   ============================================================ */
+
+.post-card {
+  background-color: var(--color-white);
+  border: var(--border);
+  border-radius: 30px;
+  padding: var(--space-6);
+  transition: border-color 0.15s ease;
+}
+
+.post-card:hover {
+  border-color: var(--color-muted);
+}
+
+/* ── Author row ─────────────────────────────────────────────── */
+.post-card__author-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.post-card__avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-full);
+  background-color: var(--color-surface);
+  border: var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: var(--font-weight-medium);
+  color: var(--color-muted);
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.post-card__author-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.post-card__author-name {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-ink);
+  line-height: 1;
+}
+
+.post-card__date {
+  font-size: var(--font-size-xs);
+  color: var(--color-subtle);
+  line-height: 1;
+}
+
+/* ── Content link ───────────────────────────────────────────── */
+.post-card__content {
+  display: block;
+  text-decoration: none;
+  margin-bottom: var(--space-5);
+}
+
+.post-card__content:hover .post-card__title {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.post-card__content:hover {
+  text-decoration: none;
+}
+
+/* ── Title ──────────────────────────────────────────────────── */
+.post-card__title {
+  font-family: var(--font-display);
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-ink);
+  line-height: var(--line-height-tight);
+  letter-spacing: var(--letter-spacing-tight);
+  margin-bottom: var(--space-2);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* ── Excerpt ─────────────────────────────────────────────────── */
+.post-card__excerpt {
+  font-size: var(--font-size-sm);
+  color: var(--color-muted);
+  line-height: var(--line-height-base);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* ── Divider between content and footer ─────────────────────── */
+.post-card__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: var(--space-4);
+  margin-top: var(--space-4);
+  border-top: var(--border);
+}
+
+.post-card__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-5);
+}
+
+/* ── Action buttons ──────────────────────────────────────────── */
+.post-card__action {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  color: var(--color-subtle);
+  font-family: var(--font-base);
+  font-size: var(--font-size-sm);
+  transition: color 0.12s ease;
+  line-height: 1;
+}
+
+.post-card__action:hover {
+  color: var(--color-ink);
+}
+
+.post-card__action svg {
+  display: block;
+  flex-shrink: 0;
+}
+
+.post-card__action-count {
+  font-size: var(--font-size-sm);
+  line-height: 1;
+  color: inherit;
+}
+
+/* ── Read time ───────────────────────────────────────────────── */
+.post-card__read-time {
+  font-size: var(--font-size-xs);
+  color: var(--color-subtle);
+  white-space: nowrap;
+}
+
+/* ── Responsive ─────────────────────────────────────────────── */
+@media (max-width: 640px) {
+  .post-card {
+    padding: var(--space-4);
+    border-radius: var(--radius-sm);
+  }
+
+  .post-card__title {
+    font-size: var(--font-size-base);
+  }
+
+  .post-card__excerpt {
+    -webkit-line-clamp: 2;
+  }
+
+  .post-card__actions {
+    gap: var(--space-4);
+  }
+}

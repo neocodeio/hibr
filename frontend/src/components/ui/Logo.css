@@ -1,0 +1,13 @@
+.logo {
+  font-family: var(--font-base);
+  font-weight: var(--font-weight-semibold);
+  font-size: var(--font-size-lg);
+  color: var(--color-ink);
+  letter-spacing: 0;
+  line-height: 1;
+  user-select: none;
+}
+
+.logo__dot {
+  color: var(--color-muted);
+}

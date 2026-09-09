@@ -1,0 +1,5 @@
+#Logs
+.env
+node_modules
+*.env
+supabase-schema.sql

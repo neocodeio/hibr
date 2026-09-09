@@ -1,0 +1,57 @@
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  font-family: var(--font-base);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  line-height: 1;
+  padding: var(--space-3) var(--space-6);
+  border-radius: var(--radius-sm);
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  white-space: nowrap;
+  cursor: pointer;
+  border: var(--border-width) solid transparent;
+  text-decoration: none;
+}
+
+.btn:hover {
+  text-decoration: none;
+}
+
+/* Primary */
+.btn--primary {
+  background-color: var(--color-ink);
+  color: var(--color-white);
+  border-color: var(--color-ink);
+}
+
+.btn--primary:hover {
+  background-color: var(--color-black);
+  border-color: var(--color-black);
+}
+
+/* Ghost */
+.btn--ghost {
+  background-color: transparent;
+  color: var(--color-muted);
+  border-color: var(--color-border);
+}
+
+.btn--ghost:hover {
+  background-color: var(--color-hover);
+  color: var(--color-ink);
+  border-color: var(--color-border);
+}
+
+/* Size modifier */
+.btn--sm {
+  font-size: var(--font-size-xs);
+  padding: var(--space-2) var(--space-4);
+}
+
+.btn--lg {
+  font-size: var(--font-size-base);
+  padding: var(--space-4) var(--space-8);
+}
