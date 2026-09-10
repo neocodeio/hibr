@@ -29,6 +29,7 @@
 }
 
 [data-theme='dark'] {
+  color-scheme: dark;
   --color-black:   #fafafa;
   --color-white:   #0a0a0a;
   --color-ink:     #e5e5e5;
@@ -40,6 +41,7 @@
 }
 
 :root {
+  color-scheme: light;
 
   /* Typography */
   --font-display: 'Geist', 'Thmanyah Serif Display', 'IBM Plex Sans Arabic', system-ui, sans-serif;

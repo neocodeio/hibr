@@ -30,6 +30,10 @@ function ProfilePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
 
+  const handlePostDeleted = (postId: string) => {
+    setPosts((prev) => prev.filter((post) => post.id !== postId));
+  };
+
   useEffect(() => {
     async function loadProfile() {
       if (!profileKey) return;
@@ -179,7 +183,7 @@ function ProfilePage() {
           {posts.length > 0 ? (
             <div className="profile-page__list">
               {posts.map((post) => (
-                <PostCard key={post.id} post={post} />
+                <PostCard key={post.id} post={post} onDeleted={handlePostDeleted} />
               ))}
             </div>
           ) : (

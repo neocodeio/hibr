@@ -1,5 +1,10 @@
 /* ============================================================
-   AuthModal — Ultra Clean Responsive Clerk Auth Modal
+   AuthModal — Modern minimalist Clerk auth dialog
+   Mobile bottom-sheet, short-screen + tablet breakpoints,
+   fluid spacing. Theme tokens (light + dark).
+   NOTE: the form itself is rendered by Clerk; only its theme
+   tokens and element class hooks are customized here (branding
+   attribution is intentionally left intact).
    ============================================================ */
 
 .auth-modal-backdrop {
@@ -13,7 +18,15 @@
   align-items: center;
   justify-content: center;
   padding: var(--space-4);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* legacy Edge */
   animation: authModalFadeIn 0.2s ease-out;
+}
+
+.auth-modal-backdrop::-webkit-scrollbar {
+  display: none; /* Chrome / Safari / modern Edge */
 }
 
 @keyframes authModalFadeIn {
@@ -28,15 +41,20 @@
 .auth-modal {
   background-color: var(--color-white);
   border: var(--border);
-  border-radius: var(--radius-lg, 16px);
+  border-radius: 25px;
   width: 100%;
-  max-width: 440px;
+  max-width: 420px;
   max-height: 90vh;
+  max-height: 90dvh;
   overflow-y: auto;
+  overscroll-behavior: contain;
   position: relative;
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+  margin: auto;
+  box-shadow:
+    0 24px 48px -12px rgba(0, 0, 0, 0.18),
+    0 8px 16px -8px rgba(0, 0, 0, 0.1);
   animation: authModalSlideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
-  padding: var(--space-6) var(--space-4) var(--space-4);
+  padding: clamp(var(--space-5), 5vw, var(--space-6));
 }
 
 @keyframes authModalSlideUp {
@@ -50,74 +68,102 @@
   }
 }
 
-/* Close Button */
-.auth-modal__close {
-  position: absolute;
-  top: 14px;
-  left: 14px;
-  z-index: 20;
-  width: 32px;
-  height: 32px;
+/* ── Top bar holding the close button (in-flow: can never overlap tabs) */
+.auth-modal__topbar {
   display: flex;
+  justify-content: flex-end; /* left corner in RTL */
+  margin-bottom: var(--space-3);
+}
+
+/* ── Close button ───────────────────────────────────────────── */
+.auth-modal__close {
+  width: 36px;
+  height: 36px;
+  margin: calc(-1 * var(--space-2)) 0 0 calc(-1 * var(--space-2));
+  display: inline-flex;
   align-items: center;
   justify-content: center;
   border-radius: var(--radius-full, 9999px);
   color: var(--color-subtle);
-  font-size: var(--font-size-md);
   background: transparent;
   border: none;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: background-color 0.15s ease, color 0.15s ease;
   line-height: 1;
 }
 
-/* Tab Switcher */
+.auth-modal__close:hover {
+  background-color: var(--color-hover);
+  color: var(--color-ink);
+}
+
+.auth-modal__close:focus-visible {
+  outline: 2px solid var(--color-ink);
+  outline-offset: 2px;
+}
+
+.auth-modal__close svg {
+  display: block;
+}
+
+/* ── Tab switcher (segmented control) ───────────────────────── */
 .auth-modal__tabs {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: var(--space-2);
-  margin-bottom: var(--space-4);
+  gap: 4px;
+  margin-bottom: var(--space-5);
   padding: 4px;
   background-color: var(--color-surface);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-full);
   border: var(--border);
 }
 
 .auth-modal__tab {
   flex: 1;
-  padding: var(--space-2) var(--space-4);
+  min-height: 40px;
+  padding: var(--space-2) var(--space-3);
+  font-family: var(--font-base);
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-medium);
   color: var(--color-muted);
   background: transparent;
   border: none;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-full);
   cursor: pointer;
-  transition: all 0.15s ease;
+  white-space: nowrap;
+  transition:
+    color 0.15s ease,
+    background-color 0.15s ease,
+    box-shadow 0.15s ease;
 }
 
 .auth-modal__tab:hover {
   color: var(--color-ink);
 }
 
+.auth-modal__tab:focus-visible {
+  outline: 2px solid var(--color-ink);
+  outline-offset: 2px;
+}
+
 .auth-modal__tab--active {
   background-color: var(--color-white);
   color: var(--color-ink);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
-
-/* Clerk Container reset */
+/* ── Clerk container ────────────────────────────────────────── */
 .auth-modal__clerk-container {
   width: 100%;
   display: flex;
   justify-content: center;
+  min-width: 0;
 }
 
-/* Override Clerk internal styles cleanly */
+/* ── Clerk structural reset (card chrome off — shell owns it) ─ */
 .hibr-clerk-root {
   width: 100% !important;
+  min-width: 0 !important;
 }
 
 .hibr-clerk-card-box {
@@ -130,29 +176,35 @@
   box-shadow: none !important;
   border: none !important;
   background-color: transparent !important;
-  padding: var(--space-2) !important;
+  padding: 0 !important;
+  margin: 0 !important;
   width: 100% !important;
+  gap: var(--space-4) !important;
 }
 
-.hibr-clerk-primary-btn {
-  background-color: var(--color-black) !important;
-  color: var(--color-white) !important;
+/* ── Clerk header ───────────────────────────────────────────── */
+.hibr-clerk-title {
   font-family: var(--font-base) !important;
-  border-radius: var(--radius-md) !important;
+  font-size: var(--font-size-md) !important;
+  font-weight: var(--font-weight-semibold) !important;
+  margin-bottom: var(--space-1) !important;
+}
+
+.hibr-clerk-subtitle {
+  font-family: var(--font-base) !important;
   font-size: var(--font-size-sm) !important;
-  font-weight: 500 !important;
-  transition: opacity 0.15s ease !important;
 }
 
-.hibr-clerk-primary-btn:hover {
-  opacity: 0.9 !important;
-}
-
+/* ── Clerk social buttons ───────────────────────────────────── */
 .hibr-clerk-social-btn {
   border: var(--border) !important;
   border-radius: var(--radius-md) !important;
   font-family: var(--font-base) !important;
+  font-size: var(--font-size-sm) !important;
+  font-weight: var(--font-weight-medium) !important;
   color: var(--color-ink) !important;
+  background-color: transparent !important;
+  min-height: 44px !important;
   transition: background-color 0.15s ease !important;
 }
 
@@ -160,25 +212,189 @@
   background-color: var(--color-hover) !important;
 }
 
+/* ── Clerk divider ──────────────────────────────────────────── */
+.hibr-clerk-divider-line {
+  background-color: var(--color-border) !important;
+}
+
+.hibr-clerk-divider-text {
+  font-family: var(--font-base) !important;
+  font-size: var(--font-size-xs) !important;
+  color: var(--color-subtle) !important;
+}
+
+/* ── Clerk fields ───────────────────────────────────────────── */
+.hibr-clerk-field-label {
+  font-family: var(--font-base) !important;
+  font-size: var(--font-size-sm) !important;
+  font-weight: var(--font-weight-medium) !important;
+}
+
+.hibr-clerk-field-input {
+  font-family: var(--font-base) !important;
+  font-size: var(--font-size-base) !important;
+  background-color: var(--color-surface) !important;
+  border: 1px solid var(--color-border) !important;
+  border-radius: var(--radius-md) !important;
+  min-height: 44px !important;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease !important;
+}
+
+.hibr-clerk-field-input:focus {
+  border-color: var(--color-ink) !important;
+  box-shadow: 0 0 0 3px rgba(10, 10, 10, 0.08) !important;
+}
+
+[data-theme='dark'] .hibr-clerk-field-input:focus {
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.12) !important;
+}
+
+/* ── Browser autofill (Chrome paints saved logins blue/yellow) ──
+   Force it back to the theme surface so filled inputs match the design. */
+.hibr-clerk-field-input:-webkit-autofill,
+.hibr-clerk-field-input:-webkit-autofill:hover,
+.hibr-clerk-field-input:-webkit-autofill:focus,
+.hibr-clerk-field-input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 100px var(--color-surface) inset !important;
+  box-shadow: 0 0 0 100px var(--color-surface) inset !important;
+  -webkit-text-fill-color: var(--color-ink) !important;
+  caret-color: var(--color-ink) !important;
+  transition: background-color 9999s ease-in-out 0s !important;
+}
+
+/* ── Clerk form + footer (kept flat — the shell owns the surface) */
+.hibr-clerk-form {
+  background: transparent !important;
+  box-shadow: none !important;
+  border: none !important;
+}
+
+/* ── Clerk primary button ───────────────────────────────────── */
+.hibr-clerk-primary-btn {
+  font-family: var(--font-base) !important;
+  border-radius: var(--radius-md) !important;
+  font-size: var(--font-size-sm) !important;
+  font-weight: var(--font-weight-semibold) !important;
+  min-height: 44px !important;
+  transition: opacity 0.15s ease !important;
+}
+
+.hibr-clerk-primary-btn:hover {
+  opacity: 0.88 !important;
+}
+
+/* ── Clerk footer ─────────────────────────────────────────────
+   Clerk paints its dark-mode footer (solid black gradient) from the
+   OS color-scheme media query, ignoring the app theme — which produced
+   a black block whenever the OS was dark and the app light. Force it
+   (and the dev badge inside it) back to transparent; text colors keep
+   coming from the theme-aware Clerk tokens above. */
+.hibr-clerk-footer,
+.hibr-clerk-footer div {
+  background-color: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
+}
+
+.hibr-clerk-footer {
+  font-family: var(--font-base) !important;
+  font-size: var(--font-size-xs) !important;
+}
+
 .hibr-clerk-footer-link {
   color: var(--color-ink) !important;
-  font-weight: 600 !important;
+  font-weight: var(--font-weight-semibold) !important;
 }
 
-/* Custom Scrollbar for small mobile viewports */
+.hibr-clerk-alert {
+  border-radius: var(--radius-md) !important;
+  font-family: var(--font-base) !important;
+  font-size: var(--font-size-sm) !important;
+}
+
+/* ── Scrollbar hidden (content stays scrollable) ────────────── */
+.auth-modal {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* legacy Edge */
+}
 .auth-modal::-webkit-scrollbar {
-  width: 6px;
-}
-.auth-modal::-webkit-scrollbar-thumb {
-  background: var(--color-border);
-  border-radius: 3px;
+  display: none; /* Chrome / Safari / modern Edge */
 }
 
+/* ── Responsive — Tablet ───────────────────────────────────── */
+@media (max-width: 640px) {
+  .auth-modal-backdrop {
+    padding: var(--space-3);
+  }
+
+  .auth-modal {
+    max-width: 420px;
+    border-radius: 18px;
+  }
+}
+
+/* ── Responsive — Mobile bottom sheet ──────────────────────── */
 @media (max-width: 480px) {
+  .auth-modal-backdrop {
+    align-items: flex-end;
+    padding: 0;
+  }
+
   .auth-modal {
     max-width: 100%;
-    margin: 0 var(--space-2);
-    padding: var(--space-5) var(--space-3) var(--space-3);
-    border-radius: var(--radius-md);
+    max-height: 92vh;
+    max-height: 92dvh;
+    border-radius: 20px 20px 0 0;
+    border-bottom: none;
+    border-left: none;
+    border-right: none;
+    margin: 0;
+    padding: var(--space-5) var(--space-4) calc(var(--space-4) + env(safe-area-inset-bottom, 0px));
+    animation-name: authSheetUp;
+  }
+
+  @keyframes authSheetUp {
+    from {
+      opacity: 0;
+      transform: translateY(48px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .auth-modal__tabs {
+    margin-bottom: var(--space-4);
+  }
+}
+
+/* ── Responsive — Short screens (landscape phones) ─────────── */
+@media (max-height: 620px) {
+  .auth-modal-backdrop {
+    align-items: flex-start;
+    padding-top: var(--space-4);
+    padding-bottom: var(--space-4);
+  }
+
+  .auth-modal {
+    max-height: none;
+  }
+
+  .auth-modal__tabs {
+    margin-bottom: var(--space-3);
+  }
+}
+
+/* ── Reduced motion ────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .auth-modal-backdrop,
+  .auth-modal {
+    animation: none;
+  }
+
+  .auth-modal__tab,
+  .auth-modal__close {
+    transition: none;
   }
 }

@@ -236,6 +236,40 @@ app.post('/api/posts', asyncHandler(async (req, res) => {
   res.json({ success: true, post: data });
 }));
 
+// Delete a post endpoint (ownership verified against the stored author)
+app.delete('/api/posts/:id', asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { authorId } = req.body || {};
+
+  if (!id) {
+    return res.status(400).json({ error: 'Missing post id' });
+  }
+
+  const { data: existing, error: fetchError } = await supabaseAdmin
+    .from('posts')
+    .select('id, author_id')
+    .eq('id', id)
+    .single();
+
+  if (fetchError || !existing) {
+    return res.status(404).json({ error: 'Post not found' });
+  }
+
+  if (authorId && existing.author_id !== authorId) {
+    return res.status(403).json({ error: 'Not the post author' });
+  }
+
+  const { error } = await supabaseAdmin.from('posts').delete().eq('id', id);
+
+  if (error) {
+    console.error('Error deleting post in Supabase:', error);
+    return res.status(500).json({ error: error.message });
+  }
+
+  console.log(`🗑️ Post "${id}" deleted successfully from Supabase!`);
+  res.json({ success: true });
+}));
+
 app.listen(PORT, () => {
   console.log(`🚀 Hibr Backend Server running on http://localhost:${PORT}`);
 });

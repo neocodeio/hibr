@@ -1,26 +1,58 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { FavouriteIcon, BubbleChatIcon, Share01Icon } from 'hugeicons-react';
+import {
+  FavouriteIcon,
+  BubbleChatIcon,
+  Share01Icon,
+  MoreHorizontalIcon,
+  Delete02Icon,
+} from 'hugeicons-react';
 
 import { useAuth } from '../../lib/AuthContext';
 import { formatRelativeTime } from '../../lib/date';
-import { getProfilePath } from '../../lib/posts';
+import { getProfilePath, deletePostFromSupabase } from '../../lib/posts';
 import type { Post } from '../../types';
 import ShareModal from './ShareModal';
 import './PostCard.css';
 
 interface PostCardProps {
   post: Post;
+  onDeleted?: (postId: string) => void;
 }
 
 function getInitial(name: string): string {
   return name.trim().charAt(0);
 }
 
-function PostCard({ post }: PostCardProps) {
-  const { isAuthenticated, requireAuth } = useAuth();
+function PostCard({ post, onDeleted }: PostCardProps) {
+  const { isAuthenticated, requireAuth, user, getSupabaseToken } = useAuth();
   const [isShareOpen, setIsShareOpen] = useState(false);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
+  const menuRef = useRef<HTMLDivElement>(null);
   const titleId = `post-card-title-${post.id}`;
+
+  const isOwner = Boolean(isAuthenticated && user && user.id === post.author.id);
+
+  // Close the owner menu on outside click or Escape.
+  useEffect(() => {
+    if (!isMenuOpen) return;
+    const handlePointerDown = (e: PointerEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setIsMenuOpen(false);
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setIsMenuOpen(false);
+    };
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isMenuOpen]);
 
   const handleLike = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -40,13 +72,42 @@ function PostCard({ post }: PostCardProps) {
     setIsShareOpen(true);
   };
 
+  const handleMenuToggle = () => {
+    setDeleteError('');
+    setIsMenuOpen((open) => !open);
+  };
+
+  const handleDelete = async () => {
+    if (isDeleting) return;
+    setIsDeleting(true);
+    setDeleteError('');
+
+    try {
+      const token = await getSupabaseToken();
+      await deletePostFromSupabase(post.id, post.author.id, token);
+      setIsMenuOpen(false);
+      if (onDeleted) onDeleted(post.id);
+    } catch (err: unknown) {
+      setDeleteError(
+        err instanceof Error && err.message
+          ? err.message
+          : 'حدث خطأ أثناء حذف المقال، يرجى المحاولة مرة أخرى.'
+      );
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   return (
-    <article className="post-card" aria-labelledby={titleId}>
+    <article
+      className={`post-card${isMenuOpen ? ' post-card--menu-open' : ''}`}
+      aria-labelledby={titleId}
+    >
 
       {/* Author row */}
       <Link
         to={getProfilePath(post.author)}
-        className="post-card__author-row"
+        className={`post-card__author-row${isOwner ? ' post-card__author-row--with-menu' : ''}`}
         aria-label={`الملف الشخصي لـ ${post.author.name}`}
       >
         <div className="post-card__avatar" aria-hidden="true">
@@ -70,6 +131,42 @@ function PostCard({ post }: PostCardProps) {
           </div>
         </div>
       </Link>
+
+      {/* Owner menu (three dots → delete) */}
+      {isOwner && (
+        <div className="post-card__menu-wrap" ref={menuRef}>
+          <button
+            type="button"
+            className="post-card__menu-btn"
+            onClick={handleMenuToggle}
+            aria-haspopup="menu"
+            aria-expanded={isMenuOpen}
+            aria-label="خيارات المقال"
+          >
+            <MoreHorizontalIcon size={18} strokeWidth={1.5} />
+          </button>
+
+          {isMenuOpen && (
+            <div className="post-card__menu" role="menu" aria-label="خيارات المقال">
+              {deleteError && (
+                <p className="post-card__menu-error" role="alert">
+                  {deleteError}
+                </p>
+              )}
+              <button
+                type="button"
+                className="post-card__menu-item post-card__menu-item--danger"
+                role="menuitem"
+                onClick={handleDelete}
+                disabled={isDeleting}
+              >
+                <Delete02Icon size={18} strokeWidth={1.5} />
+                <span>{isDeleting ? 'جاري الحذف...' : 'حذف المقال'}</span>
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Content */}
       <Link to={`/post/${post.slug}`} className="post-card__content">

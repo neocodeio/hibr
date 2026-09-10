@@ -32,6 +32,10 @@ function FeedPage() {
     setPosts((prev) => [newPost, ...prev]);
   };
 
+  const handlePostDeleted = (postId: string) => {
+    setPosts((prev) => prev.filter((post) => post.id !== postId));
+  };
+
   return (
     <main className="feed" id="main-content">
       <div className="feed__wrapper">
@@ -62,7 +66,9 @@ function FeedPage() {
               جاري تحميل المقالات...
             </div>
           ) : (
-            posts.map((post) => <PostCard key={post.id} post={post} />)
+            posts.map((post) => (
+              <PostCard key={post.id} post={post} onDeleted={handlePostDeleted} />
+            ))
           )}
         </section>
 

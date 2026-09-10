@@ -5,6 +5,7 @@
    ============================================================ */
 
 .post-card {
+  position: relative;
   background-color: transparent;
   border: 1px solid var(--color-border);
   border-radius: 16px;
@@ -14,6 +15,12 @@
     border-color 0.2s ease,
     box-shadow 0.2s ease,
     transform 0.2s ease;
+}
+
+/* Lift the whole card above following siblings while its menu is open
+   so the dropdown is never painted underneath the next card. */
+.post-card--menu-open {
+  z-index: 20;
 }
 
 .post-card:hover {
@@ -46,6 +53,152 @@ a.post-card__author-row:hover .post-card__author-name {
 a.post-card__author-row:focus-visible {
   outline: 2px solid var(--color-ink);
   outline-offset: 4px;
+}
+
+/* Reserve room for the owner menu button at the inline-end corner. */
+.post-card__author-row--with-menu {
+  padding-inline-end: 44px;
+}
+
+/* ── Owner menu (three dots) ─────────────────────────────────── */
+.post-card__menu-wrap {
+  position: absolute;
+  top: var(--space-4);
+  inset-inline-end: var(--space-4);
+  z-index: 5;
+}
+
+.post-card__menu-btn {
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-full);
+  border: 1px solid transparent;
+  background: none;
+  cursor: pointer;
+  color: var(--color-subtle);
+  transition:
+    color 0.15s ease,
+    background-color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.post-card__menu-btn:hover {
+  color: var(--color-ink);
+  background-color: var(--color-hover);
+  border-color: var(--color-border);
+}
+
+.post-card__menu-btn:focus-visible {
+  outline: 2px solid var(--color-ink);
+  outline-offset: 2px;
+}
+
+.post-card__menu-btn svg {
+  display: block;
+}
+
+.post-card__menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  inset-inline-end: 0;
+  min-width: 190px;
+  background-color: var(--color-white);
+  border: var(--border);
+  border-radius: var(--radius-md);
+  box-shadow:
+    0 16px 32px -12px rgba(0, 0, 0, 0.18),
+    0 4px 8px -4px rgba(0, 0, 0, 0.08);
+  padding: var(--space-2);
+  animation: postCardMenuIn 0.15s ease-out;
+}
+
+@keyframes postCardMenuIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.post-card__menu-error {
+  font-size: var(--font-size-xs);
+  color: #b91c1c;
+  background-color: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+  margin-bottom: var(--space-2);
+  line-height: var(--line-height-base);
+}
+
+[data-theme='dark'] .post-card__menu-error {
+  color: #fca5a5;
+  background-color: rgba(220, 38, 38, 0.12);
+  border-color: rgba(220, 38, 38, 0.35);
+}
+
+.post-card__menu-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  min-height: 40px;
+  padding: var(--space-2) var(--space-3);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  cursor: pointer;
+  font-family: var(--font-base);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-ink);
+  text-align: start;
+  transition: background-color 0.12s ease;
+}
+
+.post-card__menu-item:hover {
+  background-color: var(--color-hover);
+}
+
+.post-card__menu-item:focus-visible {
+  outline: 2px solid var(--color-ink);
+  outline-offset: -2px;
+}
+
+.post-card__menu-item:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.post-card__menu-item svg {
+  display: block;
+  flex-shrink: 0;
+}
+
+.post-card__menu-item--danger {
+  color: #dc2626;
+}
+
+.post-card__menu-item--danger svg {
+  color: inherit;
+}
+
+.post-card__menu-item--danger:hover {
+  background-color: rgba(220, 38, 38, 0.08);
+}
+
+[data-theme='dark'] .post-card__menu-item--danger {
+  color: #f87171;
+}
+
+[data-theme='dark'] .post-card__menu-item--danger:hover {
+  background-color: rgba(248, 113, 113, 0.12);
 }
 
 .post-card__avatar {
@@ -316,6 +469,12 @@ a.post-card__author-row:focus-visible {
 }
 
 /* ── Reduced motion ────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .post-card__menu {
+    animation: none;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .post-card,
   .post-card__action,

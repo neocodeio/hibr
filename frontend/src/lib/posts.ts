@@ -148,6 +148,69 @@ export function getProfilePath(author: {
 }
 
 /**
+ * Delete a post: client-side Supabase delete first, Express backend as
+ * failsafe. The author_id filter guarantees users can only delete their
+ * own posts. Throws with the real error when both paths fail.
+ */
+export async function deletePostFromSupabase(
+  postId: string,
+  authorId: string,
+  clerkToken: string | null
+): Promise<void> {
+  const errors: string[] = [];
+
+  // 1. Attempt client-side Supabase delete (RLS enforced with the Clerk JWT)
+  if (clerkToken) {
+    try {
+      const client = getSupabaseClient(clerkToken);
+      const { data, error } = await client
+        .from('posts')
+        .delete()
+        .eq('id', postId)
+        .eq('author_id', authorId)
+        .select('id');
+
+      if (!error && data && data.length > 0) return;
+      if (error) {
+        console.error('Client Supabase delete failed:', error.message);
+        errors.push(`Supabase: ${error.message}`);
+      } else {
+        errors.push('Supabase: لم يتم حذف أي مقال (تحقق من صلاحيات الحذف RLS).');
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error('Supabase client delete error:', err);
+      errors.push(`Supabase: ${message}`);
+    }
+  } else {
+    errors.push(
+      'Supabase: no Clerk JWT — configure the "supabase" JWT template in Clerk'
+    );
+  }
+
+  // 2. Failsafe: Express backend API delete (service role key bypasses RLS)
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/posts/${postId}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ authorId }),
+    });
+
+    if (res.ok) return;
+    const message =
+      (await res.json().catch(() => null))?.error || `HTTP ${res.status}`;
+    console.error('Backend API post delete failed:', message);
+    errors.push(`Backend: ${message}`);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error('Backend API post delete error:', err);
+    errors.push(`Backend: ${message}`);
+  }
+
+  throw new Error(`فشل حذف المقال. ${errors.join(' | ')}`);
+}
+
+/**
  * Fetch all posts from Supabase database (or Express backend API)
  */
 export async function fetchAllPosts(): Promise<Post[]> {
