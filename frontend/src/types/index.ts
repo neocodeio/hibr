@@ -18,3 +18,11 @@ export interface Post {
   commentsCount: number;
   tags?: string[];
 }
+
+export interface PostComment {
+  id: string;
+  postId: string;
+  content: string;
+  createdAt: string;
+  author: Author;
+}

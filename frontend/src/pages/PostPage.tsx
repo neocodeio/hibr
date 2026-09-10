@@ -10,22 +10,69 @@ import { useAuth } from '../lib/AuthContext';
 import { supabase } from '../lib/supabase';
 import { formatRelativeTime } from '../lib/date';
 import { getProfilePath } from '../lib/posts';
-import type { Post } from '../types';
+import {
+  fetchPostsStats,
+  fetchComments,
+  addComment,
+  subscribePostsRealtime,
+} from '../lib/interactions';
+import { usePostLike } from '../lib/usePostLike';
+import type { Post, PostComment } from '../types';
 import ShareModal from '../components/post/ShareModal';
+import Button from '../components/ui/Button';
 import './PostPage.css';
 
 function getInitial(name: string): string {
   return name.trim().charAt(0);
 }
 
+function scrollToComments() {
+  document.getElementById('comments')?.scrollIntoView({
+    behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      ? 'auto'
+      : 'smooth',
+    block: 'start',
+  });
+}
+
 function PostPage() {
   const { slug } = useParams<{ slug: string }>();
-  const { requireAuth } = useAuth();
+  const {
+    isAuthenticated,
+    user,
+    requireAuth,
+    openSignInModal,
+    getSupabaseToken,
+  } = useAuth();
 
   const [post, setPost] = useState<Post | null>(null);
   const [content, setContent] = useState<string>('');
   const [isLoading, setIsLoading] = useState(true);
   const [isShareOpen, setIsShareOpen] = useState(false);
+
+  const [comments, setComments] = useState<PostComment[]>([]);
+  const [commentsCount, setCommentsCount] = useState(0);
+  const [commentsLoading, setCommentsLoading] = useState(true);
+  const [commentsPostId, setCommentsPostId] = useState<string | null>(null);
+  const [commentDraft, setCommentDraft] = useState('');
+  const [commentPosting, setCommentPosting] = useState(false);
+  const [commentError, setCommentError] = useState('');
+
+  const like = usePostLike(
+    post?.id || '',
+    user?.id ?? null,
+    getSupabaseToken,
+    false,
+    post?.likesCount || 0
+  );
+  const { sync: syncLike } = like;
+
+  // Reset the comments loading flag whenever a different post is shown
+  // (render-phase derived state — the effect below only clears it).
+  if (post && commentsPostId !== post.id) {
+    setCommentsPostId(post.id);
+    setCommentsLoading(true);
+  }
 
   useEffect(() => {
     async function loadPost() {
@@ -54,6 +101,7 @@ function PostPage() {
               name: data.author?.name || 'كاتب حِبر',
               handle: (data.author?.name || 'author').toLowerCase().replace(/\s+/g, '-'),
               avatarUrl: data.author?.avatar_url || '',
+              username: data.author?.username || null,
             },
             tags: Array.isArray(data.tags)
               ? data.tags
@@ -63,6 +111,7 @@ function PostPage() {
           };
           setPost(formattedPost);
           setContent(data.content || data.excerpt || '');
+          setCommentsCount(formattedPost.commentsCount);
           setIsLoading(false);
           return;
         }
@@ -75,6 +124,45 @@ function PostPage() {
 
     loadPost();
   }, [slug]);
+
+  // Live like state + comments once the post identity is known,
+  // kept fresh by a realtime subscription (no refresh needed).
+  useEffect(() => {
+    const postId = post?.id;
+    if (!postId) return;
+    let cancelled = false;
+    const uid = isAuthenticated && user ? user.id : null;
+
+    const refresh = async () => {
+      try {
+        const stats = await fetchPostsStats([postId], uid);
+        if (cancelled) return;
+        syncLike(stats.likedIds.has(postId), stats.likesCounts.get(postId));
+        const cc = stats.commentsCounts.get(postId);
+        if (cc !== undefined) setCommentsCount(cc);
+      } catch (err) {
+        console.warn('Error fetching post stats:', err);
+      }
+
+      try {
+        const rows = await fetchComments(postId);
+        if (!cancelled) setComments(rows);
+      } catch (err) {
+        console.warn('Error fetching comments:', err);
+      }
+    };
+
+    void refresh().finally(() => {
+      if (!cancelled) setCommentsLoading(false);
+    });
+    const unsubscribe = subscribePostsRealtime([postId], () => {
+      void refresh();
+    });
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, [post?.id, isAuthenticated, user, syncLike]);
 
   if (isLoading) {
     return (
@@ -110,6 +198,41 @@ function PostPage() {
       </main>
     );
   }
+
+  const handleLike = () => {
+    if (!isAuthenticated || !user) {
+      requireAuth();
+      return;
+    }
+    void like.toggle();
+  };
+
+  const handleCommentSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user) {
+      requireAuth();
+      return;
+    }
+    if (commentPosting) return;
+    setCommentPosting(true);
+    setCommentError('');
+
+    try {
+      const token = await getSupabaseToken();
+      const created = await addComment(post.id, user.id, commentDraft, token);
+      setComments((prev) => [...prev, created]);
+      setCommentsCount((c) => c + 1);
+      setCommentDraft('');
+    } catch (err: unknown) {
+      setCommentError(
+        err instanceof Error && err.message
+          ? err.message
+          : 'تعذر نشر التعليق، يرجى المحاولة مرة أخرى.'
+      );
+    } finally {
+      setCommentPosting(false);
+    }
+  };
 
   const paragraphs = content
     .split('\n')
@@ -182,23 +305,28 @@ function PostPage() {
             <div className="post-page__actions">
               <button
                 type="button"
-                className="post-page__action"
-                onClick={() => requireAuth()}
-                aria-label={`أعجبني — ${post.likesCount}`}
+                className={`post-page__action${like.liked ? ' post-page__action--liked' : ''}`}
+                onClick={handleLike}
+                aria-pressed={like.liked}
+                aria-label={`أعجبني — ${like.likesCount}`}
               >
-                <FavouriteIcon size={18} strokeWidth={1.5} />
-                <span className="post-page__action-label">{post.likesCount}</span>
+                <FavouriteIcon
+                  size={18}
+                  strokeWidth={1.5}
+                  fill={like.liked ? 'currentColor' : 'none'}
+                />
+                <span className="post-page__action-label">{like.likesCount}</span>
               </button>
 
               <button
                 type="button"
                 className="post-page__action"
-                onClick={() => requireAuth()}
-                aria-label={`تعليقات — ${post.commentsCount}`}
+                onClick={scrollToComments}
+                aria-label={`تعليقات — ${commentsCount}`}
               >
                 <BubbleChatIcon size={18} strokeWidth={1.5} />
                 <span className="post-page__action-label">
-                  {post.commentsCount} تعليق
+                  {commentsCount} تعليق
                 </span>
               </button>
 
@@ -214,6 +342,105 @@ function PostPage() {
             </div>
           </footer>
         </article>
+
+        <section
+          id="comments"
+          className="post-page__comments"
+          aria-label="التعليقات"
+        >
+          <h2 className="post-page__comments-title">
+            التعليقات
+            <span className="post-page__comments-count">({commentsCount})</span>
+          </h2>
+
+          {isAuthenticated && user ? (
+            <form
+              className="post-page__comment-form"
+              onSubmit={handleCommentSubmit}
+            >
+              {commentError && (
+                <p className="post-page__comment-error" role="alert">
+                  {commentError}
+                </p>
+              )}
+              <label htmlFor="comment-text" className="sr-only">
+                اكتب تعليقك
+              </label>
+              <textarea
+                id="comment-text"
+                className="post-page__comment-input"
+                rows={3}
+                placeholder="شارك رأيك في المقال..."
+                value={commentDraft}
+                onChange={(e) => setCommentDraft(e.target.value)}
+                disabled={commentPosting}
+              />
+              <div className="post-page__comment-actions">
+                <Button
+                  variant="primary"
+                  size="sm"
+                  type="submit"
+                  disabled={commentPosting || !commentDraft.trim()}
+                >
+                  {commentPosting ? 'جاري النشر...' : 'نشر التعليق'}
+                </Button>
+              </div>
+            </form>
+          ) : (
+            <div className="post-page__comment-signin">
+              <p>سجّل دخولك للمشاركة في النقاش.</p>
+              <Button variant="ghost" size="sm" onClick={openSignInModal}>
+                سجّل دخولك للتعليق
+              </Button>
+            </div>
+          )}
+
+          <div className="post-page__comment-list">
+            {commentsLoading ? (
+              <p className="post-page__comment-status">جاري تحميل التعليقات...</p>
+            ) : comments.length === 0 ? (
+              <p className="post-page__comment-status">
+                لا توجد تعليقات بعد. كن أول من يعلّق.
+              </p>
+            ) : (
+              comments.map((comment) => (
+                <article key={comment.id} className="post-page__comment">
+                  <div
+                    className="post-page__comment-avatar"
+                    aria-hidden="true"
+                  >
+                    {comment.author.avatarUrl ? (
+                      <img
+                        src={comment.author.avatarUrl}
+                        alt=""
+                        loading="lazy"
+                      />
+                    ) : (
+                      <span>{getInitial(comment.author.name)}</span>
+                    )}
+                  </div>
+                  <div className="post-page__comment-content">
+                    <div className="post-page__comment-meta">
+                      <Link
+                        to={getProfilePath(comment.author)}
+                        className="post-page__comment-author"
+                      >
+                        {comment.author.name}
+                      </Link>
+                      <time
+                        className="post-page__comment-date"
+                        dateTime={comment.createdAt}
+                      >
+                        {formatRelativeTime(comment.createdAt)}
+                      </time>
+                    </div>
+                    <p className="post-page__comment-text">{comment.content}</p>
+                  </div>
+                </article>
+              ))
+            )}
+          </div>
+        </section>
       </div>
 
       <ShareModal post={isShareOpen ? post : null} onClose={() => setIsShareOpen(false)} />

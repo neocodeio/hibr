@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import type { Post } from '../types';
 import { fetchAllPosts } from '../lib/posts';
+import { fetchPostsStats, subscribePostsRealtime } from '../lib/interactions';
+import type { PostsStats } from '../lib/interactions';
 import { useAuth } from '../lib/AuthContext';
 import PostCard from '../components/post/PostCard';
 import CreatePostModal from '../components/post/CreatePostModal';
@@ -13,10 +15,11 @@ import './FeedPage.css';
 // ];
 
 function FeedPage() {
-  const { isCreatePostOpen, closeCreatePostModal } = useAuth();
+  const { isCreatePostOpen, closeCreatePostModal, isAuthenticated, user } = useAuth();
   // const [activeTab, setActiveTab] = useState('all');
   const [posts, setPosts] = useState<Post[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [stats, setStats] = useState<PostsStats | null>(null);
 
   useEffect(() => {
     async function loadPosts() {
@@ -27,6 +30,28 @@ function FeedPage() {
     }
     loadPosts();
   }, []);
+
+  // Live like states + counts for all visible posts (single batch query),
+  // kept fresh by a realtime subscription (no refresh needed).
+  // NOTE: no stats reset when the list empties — nothing renders then, and
+  // the next non-empty list always triggers a fresh fetch below.
+  useEffect(() => {
+    if (posts.length === 0) return;
+    let cancelled = false;
+    const ids = posts.map((post) => post.id);
+    const uid = isAuthenticated && user ? user.id : null;
+    const refresh = () => {
+      fetchPostsStats(ids, uid).then((s) => {
+        if (!cancelled) setStats(s);
+      });
+    };
+    refresh();
+    const unsubscribe = subscribePostsRealtime(ids, refresh);
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, [posts, isAuthenticated, user]);
 
   const handlePostCreated = (newPost: Post) => {
     setPosts((prev) => [newPost, ...prev]);
@@ -67,7 +92,12 @@ function FeedPage() {
             </div>
           ) : (
             posts.map((post) => (
-              <PostCard key={post.id} post={post} onDeleted={handlePostDeleted} />
+              <PostCard
+                key={post.id}
+                post={post}
+                onDeleted={handlePostDeleted}
+                stats={stats}
+              />
             ))
           )}
         </section>

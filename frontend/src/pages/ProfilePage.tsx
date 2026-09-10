@@ -4,6 +4,8 @@ import { ArrowRight01Icon } from 'hugeicons-react';
 import { useAuth } from '../lib/AuthContext';
 import { supabase } from '../lib/supabase';
 import { formatDbPost } from '../lib/posts';
+import { fetchPostsStats, subscribePostsRealtime } from '../lib/interactions';
+import type { PostsStats } from '../lib/interactions';
 import type { Post } from '../types';
 import PostCard from '../components/post/PostCard';
 import Button from '../components/ui/Button';
@@ -23,16 +25,43 @@ function getInitial(name: string): string {
 
 function ProfilePage() {
   const { username: profileKey } = useParams<{ username: string }>();
-  const { user: currentUser, openCreatePostModal } = useAuth();
+  const {
+    user: currentUser,
+    openCreatePostModal,
+    isAuthenticated,
+  } = useAuth();
 
   const [profile, setProfile] = useState<ProfileUser | null>(null);
   const [posts, setPosts] = useState<Post[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  const [stats, setStats] = useState<PostsStats | null>(null);
 
   const handlePostDeleted = (postId: string) => {
     setPosts((prev) => prev.filter((post) => post.id !== postId));
   };
+
+  // Live like states + counts for the author's posts (single batch query),
+  // kept fresh by a realtime subscription (no refresh needed).
+  // NOTE: no stats reset when the list empties — nothing renders then, and
+  // the next non-empty list always triggers a fresh fetch below.
+  useEffect(() => {
+    if (posts.length === 0) return;
+    let cancelled = false;
+    const ids = posts.map((post) => post.id);
+    const uid = isAuthenticated && currentUser ? currentUser.id : null;
+    const refresh = () => {
+      fetchPostsStats(ids, uid).then((s) => {
+        if (!cancelled) setStats(s);
+      });
+    };
+    refresh();
+    const unsubscribe = subscribePostsRealtime(ids, refresh);
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, [posts, isAuthenticated, currentUser]);
 
   useEffect(() => {
     async function loadProfile() {
@@ -183,7 +212,7 @@ function ProfilePage() {
           {posts.length > 0 ? (
             <div className="profile-page__list">
               {posts.map((post) => (
-                <PostCard key={post.id} post={post} onDeleted={handlePostDeleted} />
+                <PostCard key={post.id} post={post} onDeleted={handlePostDeleted} stats={stats} />
               ))}
             </div>
           ) : (

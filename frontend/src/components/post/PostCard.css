@@ -242,6 +242,29 @@ a.post-card__author-row:focus-visible {
   background-color: var(--color-hover);
 }
 
+a.post-card__action:hover {
+  text-decoration: none;
+}
+
+/* Liked state — filled red heart */
+.post-card__action--liked {
+  color: #e11d48;
+}
+
+.post-card__action--liked:hover {
+  color: #be123c;
+  background-color: rgba(225, 29, 72, 0.08);
+}
+
+[data-theme='dark'] .post-card__action--liked {
+  color: #fb7185;
+}
+
+[data-theme='dark'] .post-card__action--liked:hover {
+  color: #fda4af;
+  background-color: rgba(251, 113, 133, 0.12);
+}
+
 .post-card__action:focus-visible {
   outline: 2px solid var(--color-ink);
   outline-offset: 2px;

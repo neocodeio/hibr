@@ -11,29 +11,53 @@ import {
 import { useAuth } from '../../lib/AuthContext';
 import { formatRelativeTime } from '../../lib/date';
 import { getProfilePath, deletePostFromSupabase } from '../../lib/posts';
+import { usePostLike } from '../../lib/usePostLike';
 import type { Post } from '../../types';
+import type { PostsStats } from '../../lib/interactions';
 import ShareModal from './ShareModal';
 import './PostCard.css';
 
 interface PostCardProps {
   post: Post;
   onDeleted?: (postId: string) => void;
+  stats?: PostsStats | null;
 }
 
 function getInitial(name: string): string {
   return name.trim().charAt(0);
 }
 
-function PostCard({ post, onDeleted }: PostCardProps) {
+function PostCard({ post, onDeleted, stats = null }: PostCardProps) {
   const { isAuthenticated, requireAuth, user, getSupabaseToken } = useAuth();
   const [isShareOpen, setIsShareOpen] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState('');
+  const [commentsCount, setCommentsCount] = useState(post.commentsCount);
   const menuRef = useRef<HTMLDivElement>(null);
   const titleId = `post-card-title-${post.id}`;
 
   const isOwner = Boolean(isAuthenticated && user && user.id === post.author.id);
+  const like = usePostLike(
+    post.id,
+    user?.id ?? null,
+    getSupabaseToken,
+    false,
+    post.likesCount
+  );
+
+  // Live stats arrive after mount (one batch query per list). Apply them
+  // during render (the documented derived-state pattern) so a late stats
+  // object never leaves the card showing stale counts.
+  const [appliedStats, setAppliedStats] = useState<PostsStats | null>(null);
+  if (stats !== appliedStats) {
+    setAppliedStats(stats);
+    if (stats) {
+      like.sync(stats.likedIds.has(post.id), stats.likesCounts.get(post.id));
+      const cc = stats.commentsCounts.get(post.id);
+      if (cc !== undefined) setCommentsCount(cc);
+    }
+  }
 
   // Close the owner menu on outside click or Escape.
   useEffect(() => {
@@ -57,13 +81,11 @@ function PostCard({ post, onDeleted }: PostCardProps) {
   const handleLike = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    if (!isAuthenticated) requireAuth();
-  };
-
-  const handleComment = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (!isAuthenticated) requireAuth();
+    if (!isAuthenticated || !user) {
+      requireAuth();
+      return;
+    }
+    void like.toggle();
   };
 
   const handleShare = (e: React.MouseEvent) => {
@@ -188,23 +210,27 @@ function PostCard({ post, onDeleted }: PostCardProps) {
         <div className="post-card__actions">
           <button
             type="button"
-            className="post-card__action"
+            className={`post-card__action${like.liked ? ' post-card__action--liked' : ''}`}
             onClick={handleLike}
-            aria-label={`أعجبني — ${post.likesCount}`}
+            aria-pressed={like.liked}
+            aria-label={`أعجبني — ${like.likesCount}`}
           >
-            <FavouriteIcon size={18} strokeWidth={1.5} />
-            <span className="post-card__action-count">{post.likesCount}</span>
+            <FavouriteIcon
+              size={18}
+              strokeWidth={1.5}
+              fill={like.liked ? 'currentColor' : 'none'}
+            />
+            <span className="post-card__action-count">{like.likesCount}</span>
           </button>
 
-          <button
-            type="button"
+          <Link
+            to={`/post/${post.slug}#comments`}
             className="post-card__action"
-            onClick={handleComment}
-            aria-label={`تعليقات — ${post.commentsCount}`}
+            aria-label={`تعليقات — ${commentsCount}`}
           >
             <BubbleChatIcon size={18} strokeWidth={1.5} />
-            <span className="post-card__action-count">{post.commentsCount}</span>
-          </button>
+            <span className="post-card__action-count">{commentsCount}</span>
+          </Link>
 
           <button
             type="button"
