@@ -3,6 +3,7 @@ export interface Author {
   name: string;
   handle: string; // used in URL: /author/:handle
   avatarUrl?: string; // author profile image (from users.avatar_url)
+  username?: string | null; // pretty profile URL key (from users.username)
 }
 
 export interface Post {

@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
+import { Cancel01Icon } from 'hugeicons-react';
 import { useAuth } from '../../lib/AuthContext';
-import { createPostInSupabase, calculateReadTime } from '../../lib/posts';
+import { createPostInSupabase } from '../../lib/posts';
 import type { Post } from '../../types';
 import Button from '../ui/Button';
 import './CreatePostModal.css';
@@ -19,8 +21,6 @@ function CreatePostModal({ isOpen, onClose, onPostCreated }: CreatePostModalProp
   const [content, setContent] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
-
-  const estimatedReadTime = calculateReadTime(content);
 
   // Guard: the author identity is required to save anything to the database.
   const canPublish = Boolean(user?.id && user.id !== 'anonymous');
@@ -97,7 +97,10 @@ function CreatePostModal({ isOpen, onClose, onPostCreated }: CreatePostModalProp
     }
   };
 
-  return (
+  // Rendered in a portal on document.body so ancestor styles
+  // (transforms, filters, overflow, stacking contexts) can never
+  // trap the fixed backdrop or clip the dialog.
+  return createPortal(
     <div
       className="create-post-backdrop"
       onClick={onClose}
@@ -120,11 +123,15 @@ function CreatePostModal({ isOpen, onClose, onPostCreated }: CreatePostModalProp
             onClick={onClose}
             aria-label="إغلاق"
           >
-            ✕
+            <Cancel01Icon size={18} strokeWidth={2} />
           </button>
         </div>
 
-        {errorMsg && <div className="create-post-modal__error">{errorMsg}</div>}
+        {errorMsg && (
+          <div className="create-post-modal__error" role="alert">
+            {errorMsg}
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="create-post-modal__form">
           <div className="create-post-modal__field">
@@ -139,12 +146,13 @@ function CreatePostModal({ isOpen, onClose, onPostCreated }: CreatePostModalProp
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               required
+              autoFocus
             />
           </div>
 
           <div className="create-post-modal__field">
             <label htmlFor="post-excerpt" className="create-post-modal__label">
-              مقدمة موجزة (اختياري)
+              مقدمة موجزة <span className="create-post-modal__optional">(اختياري)</span>
             </label>
             <textarea
               id="post-excerpt"
@@ -157,14 +165,9 @@ function CreatePostModal({ isOpen, onClose, onPostCreated }: CreatePostModalProp
           </div>
 
           <div className="create-post-modal__field">
-            <div className="create-post-modal__label-row">
-              <label htmlFor="post-content" className="create-post-modal__label">
-                محتوى المقال
-              </label>
-              <span className="create-post-modal__read-meta">
-                وقت القراءة المقدر: {estimatedReadTime} دقيقة
-              </span>
-            </div>
+            <label htmlFor="post-content" className="create-post-modal__label">
+              محتوى المقال
+            </label>
             <textarea
               id="post-content"
               rows={8}
@@ -195,7 +198,8 @@ function CreatePostModal({ isOpen, onClose, onPostCreated }: CreatePostModalProp
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 

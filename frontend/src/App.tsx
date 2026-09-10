@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './lib/AuthContext';
 import { ThemeProvider } from './lib/ThemeProvider';
 import Navbar from './components/layout/Navbar';
@@ -6,6 +6,7 @@ import Navbar from './components/layout/Navbar';
 import AuthModal from './components/ui/AuthModal';
 import FeedPage from './pages/FeedPage';
 import PostPage from './pages/PostPage';
+import ProfilePage from './pages/ProfilePage';
 
 function App() {
   return (
@@ -16,6 +17,9 @@ function App() {
           <Routes>
             <Route path="/" element={<FeedPage />} />
             <Route path="/post/:slug" element={<PostPage />} />
+            <Route path="/profile/:username" element={<ProfilePage />} />
+            {/* Unknown URLs redirect home instead of rendering a blank page */}
+            <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
           {/* <Footer /> */}
           <AuthModal />

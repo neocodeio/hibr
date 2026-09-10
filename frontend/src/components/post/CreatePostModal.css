@@ -1,5 +1,6 @@
 /* ============================================================
-   CreatePostModal — Minimalist Editorial Article Writer
+   CreatePostModal — Modern minimalist editor dialog
+   Pure black & white via theme tokens (light + dark), RTL-first.
    ============================================================ */
 
 .create-post-backdrop {
@@ -13,10 +14,10 @@
   align-items: center;
   justify-content: center;
   padding: var(--space-4);
-  animation: modalFadeIn 0.2s ease-out;
+  animation: createPostFadeIn 0.2s ease-out;
 }
 
-@keyframes modalFadeIn {
+@keyframes createPostFadeIn {
   from {
     opacity: 0;
   }
@@ -28,18 +29,19 @@
 .create-post-modal {
   background-color: var(--color-white);
   border: var(--border);
-  border-radius: var(--radius-lg, 16px);
+  border-radius: 20px;
   width: 100%;
-  max-width: 680px;
+  max-width: 640px;
   max-height: 90vh;
   overflow-y: auto;
-  position: relative;
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
-  padding: var(--space-6) var(--space-8);
-  animation: modalSlideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow:
+    0 24px 48px -12px rgba(0, 0, 0, 0.18),
+    0 8px 16px -8px rgba(0, 0, 0, 0.1);
+  padding: clamp(var(--space-5), 4vw, var(--space-8));
+  animation: createPostSlideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-@keyframes modalSlideUp {
+@keyframes createPostSlideUp {
   from {
     opacity: 0;
     transform: translateY(12px) scale(0.98);
@@ -50,35 +52,36 @@
   }
 }
 
+/* ── Header ────────────────────────────────────────────────── */
 .create-post-modal__header {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: var(--space-3);
   margin-bottom: var(--space-6);
-  padding-bottom: var(--space-3);
-  border-bottom: var(--border);
 }
 
 .create-post-modal__heading {
   font-size: var(--font-size-lg);
-  font-weight: var(--font-weight-medium);
+  font-weight: var(--font-weight-semibold);
   color: var(--color-ink);
   margin: 0;
+  letter-spacing: var(--letter-spacing-tight);
 }
 
 .create-post-modal__close {
-  width: 32px;
-  height: 32px;
-  display: flex;
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
   border-radius: var(--radius-full);
   color: var(--color-subtle);
-  font-size: var(--font-size-md);
   background: transparent;
   border: none;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
 
 .create-post-modal__close:hover {
@@ -86,6 +89,16 @@
   color: var(--color-ink);
 }
 
+.create-post-modal__close:focus-visible {
+  outline: 2px solid var(--color-ink);
+  outline-offset: 2px;
+}
+
+.create-post-modal__close svg {
+  display: block;
+}
+
+/* ── Error ─────────────────────────────────────────────────── */
 .create-post-modal__error {
   background-color: #fef2f2;
   color: #991b1b;
@@ -93,9 +106,17 @@
   border-radius: var(--radius-md);
   padding: var(--space-3) var(--space-4);
   font-size: var(--font-size-sm);
-  margin-bottom: var(--space-4);
+  line-height: var(--line-height-base);
+  margin-bottom: var(--space-5);
 }
 
+[data-theme='dark'] .create-post-modal__error {
+  background-color: rgba(220, 38, 38, 0.12);
+  color: #fca5a5;
+  border-color: rgba(220, 38, 38, 0.35);
+}
+
+/* ── Form ──────────────────────────────────────────────────── */
 .create-post-modal__form {
   display: flex;
   flex-direction: column;
@@ -108,46 +129,55 @@
   gap: var(--space-2);
 }
 
-.create-post-modal__label-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
 .create-post-modal__label {
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-semibold);
   color: var(--color-ink);
+  line-height: 1.4;
 }
 
-.create-post-modal__read-meta {
-  font-size: var(--font-size-xs);
+.create-post-modal__optional {
+  font-weight: var(--font-weight-regular);
   color: var(--color-subtle);
 }
 
+/* ── Inputs ────────────────────────────────────────────────── */
 .create-post-modal__input,
 .create-post-modal__textarea {
   width: 100%;
   font-family: var(--font-base);
   font-size: var(--font-size-base);
   color: var(--color-ink);
-  background-color: var(--color-white);
-  border: var(--border);
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   padding: var(--space-3) var(--space-4);
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
   outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+}
+
+.create-post-modal__input::placeholder,
+.create-post-modal__textarea::placeholder {
+  color: var(--color-subtle);
 }
 
 .create-post-modal__title-input {
+  font-family: var(--font-display);
   font-size: var(--font-size-md);
-  font-weight: var(--font-weight-medium);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-snug);
 }
 
 .create-post-modal__input:focus,
 .create-post-modal__textarea:focus {
   border-color: var(--color-ink);
-  box-shadow: 0 0 0 2px rgba(10, 10, 10, 0.06);
+  background-color: var(--color-white);
+  box-shadow: 0 0 0 3px rgba(10, 10, 10, 0.08);
+}
+
+[data-theme='dark'] .create-post-modal__input:focus,
+[data-theme='dark'] .create-post-modal__textarea:focus {
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.12);
 }
 
 .create-post-modal__textarea {
@@ -155,19 +185,80 @@
   line-height: var(--line-height-base);
 }
 
+.create-post-modal__excerpt-textarea {
+  min-height: 76px;
+}
+
+.create-post-modal__content-textarea {
+  min-height: 220px;
+}
+
+/* ── Actions ───────────────────────────────────────────────── */
 .create-post-modal__actions {
   display: flex;
   align-items: center;
   justify-content: flex-end;
   gap: var(--space-3);
-  margin-top: var(--space-2);
-  padding-top: var(--space-4);
+  margin-top: var(--space-1);
+  padding-top: var(--space-5);
   border-top: var(--border);
 }
 
+/* ── Responsive — Tablet ───────────────────────────────────── */
 @media (max-width: 640px) {
   .create-post-modal {
-    padding: var(--space-5) var(--space-4);
-    border-radius: var(--radius-md);
+    border-radius: 16px;
+  }
+
+  .create-post-modal__heading {
+    font-size: var(--font-size-base);
+  }
+
+  .create-post-modal__content-textarea {
+    min-height: 180px;
+  }
+}
+
+/* ── Responsive — Mobile ───────────────────────────────────── */
+@media (max-width: 480px) {
+  .create-post-backdrop {
+    padding: var(--space-3);
+  }
+
+  .create-post-modal {
+    border-radius: 16px;
+    max-height: 92vh;
+    padding-bottom: calc(var(--space-5) + env(safe-area-inset-bottom, 0px));
+  }
+
+  .create-post-modal__header {
+    margin-bottom: var(--space-5);
+  }
+
+  .create-post-modal__form {
+    gap: var(--space-4);
+  }
+
+  .create-post-modal__actions {
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+
+  .create-post-modal__actions > * {
+    width: 100%;
+  }
+}
+
+/* ── Reduced motion ────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .create-post-backdrop,
+  .create-post-modal {
+    animation: none;
+  }
+
+  .create-post-modal__input,
+  .create-post-modal__textarea,
+  .create-post-modal__close {
+    transition: none;
   }
 }

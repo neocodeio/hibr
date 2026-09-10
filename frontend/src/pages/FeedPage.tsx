@@ -6,15 +6,15 @@ import PostCard from '../components/post/PostCard';
 import CreatePostModal from '../components/post/CreatePostModal';
 import './FeedPage.css';
 
-const TABS = [
-  { id: 'all', label: 'الكل' },
-  { id: 'trending', label: 'ترند' },
-  { id: 'new', label: 'جديد' },
-];
+// const TABS = [
+//   { id: 'all', label: 'الكل' },
+//   { id: 'trending', label: 'ترند' },
+//   { id: 'new', label: 'جديد' },
+// ];
 
 function FeedPage() {
   const { isCreatePostOpen, closeCreatePostModal } = useAuth();
-  const [activeTab, setActiveTab] = useState('all');
+  // const [activeTab, setActiveTab] = useState('all');
   const [posts, setPosts] = useState<Post[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -37,7 +37,7 @@ function FeedPage() {
       <div className="feed__wrapper">
         {/* Tab bar */}
         <div className="feed__bar" role="tablist" aria-label="تصفية المقالات">
-          <div className="feed__tabs">
+          {/* <div className="feed__tabs">
             {TABS.map((tab) => (
               <button
                 key={tab.id}
@@ -50,7 +50,8 @@ function FeedPage() {
                 {tab.label}
               </button>
             ))}
-          </div>
+          </div> */}
+          <h1>المقالات</h1>
         </div>
 
         {/* Post list */}

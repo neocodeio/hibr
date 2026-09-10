@@ -2,6 +2,8 @@
    HIBR — Global Design System
    ============================================================ */
 
+@import url('https://fonts.googleapis.com/css2?family=Geist:ital,wght@0,100..900;1,100..900&display=swap');
+
 /* ------------------------------------------------------------
    1. CSS Custom Properties (Design Tokens)
    ------------------------------------------------------------ */
@@ -40,8 +42,8 @@
 :root {
 
   /* Typography */
-  --font-display: 'Thmanyah Serif Display', 'IBM Plex Sans Arabic', system-ui, sans-serif;
-  --font-base:    'Thmanyah Serif Display', 'IBM Plex Sans Arabic', system-ui, sans-serif;
+  --font-display: 'Geist', 'Thmanyah Serif Display', 'IBM Plex Sans Arabic', system-ui, sans-serif;
+  --font-base:    'Geist', 'Thmanyah Serif Display', 'IBM Plex Sans Arabic', system-ui, sans-serif;
   --font-size-xs:   0.75rem;   /* 12px */
   --font-size-sm:   0.875rem;  /* 14px */
   --font-size-base: 1rem;      /* 16px */

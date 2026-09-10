@@ -8,6 +8,7 @@ export interface UserProfile {
   name: string;
   email: string;
   avatarUrl: string;
+  username: string | null; // Clerk username — pretty key for /profile/:username
 }
 
 interface AuthContextValue {
@@ -55,6 +56,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
             name: clerkUser.fullName || clerkUser.username || clerkUser.primaryEmailAddress?.emailAddress?.split('@')[0] || 'كاتب حِبر',
             email: clerkUser.primaryEmailAddress?.emailAddress || '',
             avatarUrl: clerkUser.imageUrl || '',
+            username: clerkUser.username ?? null,
           }
         : null,
     [clerkUser]
@@ -78,16 +80,21 @@ export function AuthProvider({ children }: AuthProviderProps) {
         try {
           const token = await getToken({ template: 'supabase' });
           const client = getSupabaseClient(token);
-          await client.from('users').upsert(
-            {
-              id: user.id,
-              email: user.email,
-              name: user.name,
-              avatar_url: user.avatarUrl,
-              updated_at: new Date().toISOString(),
-            },
-            { onConflict: 'id' }
-          );
+          const baseRecord = {
+            id: user.id,
+            email: user.email,
+            name: user.name,
+            avatar_url: user.avatarUrl,
+            updated_at: new Date().toISOString(),
+          };
+          const { error } = await client
+            .from('users')
+            .upsert({ ...baseRecord, username: user.username }, { onConflict: 'id' });
+          if (error && (error.code === '42703' || /username/i.test(error.message || ''))) {
+            // The `username` column hasn't been added in Supabase yet —
+            // sync without it so login never breaks (pre-SQL fallback).
+            await client.from('users').upsert(baseRecord, { onConflict: 'id' });
+          }
         } catch {
           // Client-side sync failed — the backend sync below acts as failsafe
         }

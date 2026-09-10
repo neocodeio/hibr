@@ -2,7 +2,7 @@ import { getSupabaseClient, supabase, API_BASE_URL } from './supabase';
 import type { Post } from '../types';
 
 /** Shape of a post row as returned by Supabase / the Express backend. */
-interface DbPostRow {
+export interface DbPostRow {
   id: string;
   slug: string;
   title: string;
@@ -17,6 +17,7 @@ interface DbPostRow {
     id?: string | null;
     name?: string | null;
     avatar_url?: string | null;
+    username?: string | null;
   } | null;
 }
 
@@ -50,19 +51,13 @@ export function calculateReadTime(content: string): number {
   return Math.max(1, Math.ceil(words / 200));
 }
 
-function formatDbPost(item: DbPostRow): Post {
+export function formatDbPost(item: DbPostRow): Post {
   return {
     id: item.id,
     slug: item.slug,
     title: item.title,
     excerpt: item.excerpt || '',
-    publishedAt: item.published_at
-      ? new Date(item.published_at).toLocaleDateString('ar-SA', {
-          day: 'numeric',
-          month: 'long',
-          year: 'numeric',
-        })
-      : 'اليوم',
+    publishedAt: item.published_at || new Date().toISOString(),
     readTime: item.read_time || 5,
     likesCount: item.likes_count || 0,
     commentsCount: item.comments_count || 0,
@@ -71,6 +66,7 @@ function formatDbPost(item: DbPostRow): Post {
       name: item.author?.name || 'كاتب حِبر',
       handle: (item.author?.name || 'author').toLowerCase().replace(/\s+/g, '-'),
       avatarUrl: item.author?.avatar_url || '',
+      username: item.author?.username || null,
     },
   };
 }
@@ -138,6 +134,17 @@ async function ensureAuthorExists(
         `Is the backend running on ${API_BASE_URL}?`
     );
   }
+}
+
+/**
+ * Public profile URL for an author — pretty `/profile/:username` when the
+ * username is known, raw-id fallback otherwise (both resolve on ProfilePage).
+ */
+export function getProfilePath(author: {
+  id: string;
+  username?: string | null;
+}): string {
+  return author.username ? `/profile/${author.username}` : `/profile/${author.id}`;
 }
 
 /**
