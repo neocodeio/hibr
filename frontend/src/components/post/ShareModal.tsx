@@ -9,6 +9,7 @@ import {
 } from 'hugeicons-react';
 
 import type { Post } from '../../types';
+import { getPostUrl } from '../../lib/posts';
 import './ShareModal.css';
 
 function SubstackIcon({ size = 22 }: { size?: number; strokeWidth?: number }) {
@@ -84,7 +85,7 @@ function ShareModal({ post, onClose }: ShareModalProps) {
 
   if (!post) return null;
 
-  const url = `${window.location.origin}/post/${post.slug}`;
+  const url = getPostUrl(post);
   const encodedUrl = encodeURIComponent(url);
   const encodedText = encodeURIComponent(`${post.title} — ${post.excerpt}`);
 

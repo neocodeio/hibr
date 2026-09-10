@@ -10,7 +10,7 @@ import {
 import { useAuth } from '../lib/AuthContext';
 import { supabase } from '../lib/supabase';
 import { formatRelativeTime } from '../lib/date';
-import { getProfilePath } from '../lib/posts';
+import { getProfilePath, normalizeSlugParam } from '../lib/posts';
 import {
   fetchPostsStats,
   fetchComments,
@@ -111,14 +111,46 @@ function PostPage() {
       if (!slug) return;
       setIsLoading(true);
 
-      try {
-        const { data, error } = await supabase
-          .from('posts')
-          .select('*, author:users!posts_author_id_fkey(*)')
-          .eq('slug', slug)
-          .single();
+      // Shared links may arrive percent-encoded (Arabic slugs) while the DB
+      // stores the raw value — try the decoded form first, then the raw
+      // param, so old and new links both resolve.
+      const decoded = normalizeSlugParam(slug);
+      const candidates = decoded === slug ? [slug] : [decoded, slug];
 
-        if (data && !error) {
+      try {
+        type PostRow = {
+          id: string;
+          slug: string;
+          title: string;
+          excerpt?: string | null;
+          content?: string | null;
+          published_at?: string | null;
+          read_time?: number | null;
+          likes_count?: number | null;
+          comments_count?: number | null;
+          author_id?: string | null;
+          tags?: unknown;
+          author?: {
+            id?: string | null;
+            name?: string | null;
+            avatar_url?: string | null;
+            username?: string | null;
+          } | null;
+        };
+        let data: PostRow | null = null;
+        for (const candidate of candidates) {
+          const result = await supabase
+            .from('posts')
+            .select('*, author:users!posts_author_id_fkey(*)')
+            .eq('slug', candidate)
+            .maybeSingle();
+          if (result.data && !result.error) {
+            data = result.data as PostRow;
+            break;
+          }
+        }
+
+        if (data) {
           const formattedPost: Post = {
             id: data.id,
             slug: data.slug,
@@ -129,7 +161,7 @@ function PostPage() {
             likesCount: data.likes_count || 0,
             commentsCount: data.comments_count || 0,
             author: {
-              id: data.author?.id || data.author_id,
+              id: data.author?.id || data.author_id || '',
               name: data.author?.name || 'كاتب حِبر',
               handle: (data.author?.name || 'author').toLowerCase().replace(/\s+/g, '-'),
               avatarUrl: data.author?.avatar_url || '',

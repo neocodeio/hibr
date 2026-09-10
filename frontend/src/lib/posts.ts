@@ -36,14 +36,55 @@ export interface CreatePostPayload {
   tags?: string[];
 }
 
+/**
+ * Generate a clean, URL-safe ASCII slug.
+ * Latin characters are slugified; non-Latin titles (e.g. Arabic) fall back
+ * to `post-<unique>` so shared links stay short, readable and copy-safe.
+ * Existing slugs already stored in the DB keep working — lookup always
+ * matches the exact stored value (see PostPage).
+ */
 export function generateSlug(title: string): string {
-  const base = title
+  const uniqueId = Date.now().toString(36).slice(-4);
+  const latin = title
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
     .trim()
     .toLowerCase()
-    .replace(/[^\w\u0621-\u064A\s-]/g, '')
-    .replace(/\s+/g, '-');
-  const uniqueId = Date.now().toString(36).slice(-4);
-  return `${base}-${uniqueId}` || `post-${uniqueId}`;
+    .replace(/[^a-z0-9\s-]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 60)
+    .replace(/-+$/g, '');
+  if (!latin) return `post-${uniqueId}`;
+  return `${latin}-${uniqueId}`;
+}
+
+/**
+ * Decode a `:slug` route param safely. React Router already decodes params,
+ * but shared/copied links may arrive percent-encoded (especially slugs with
+ * Arabic characters), so we normalize defensively without ever throwing.
+ */
+export function normalizeSlugParam(raw: string): string {
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return raw;
+  }
+}
+
+/** App-relative path for a post, safely encoded for the URL bar. */
+export function getPostPath(post: { slug: string }): string {
+  return `/post/${encodeURIComponent(post.slug)}`;
+}
+
+/** Absolute shareable URL for a post (uses the current origin in browser). */
+export function getPostUrl(post: { slug: string }): string {
+  const origin =
+    typeof window !== 'undefined' && window.location?.origin
+      ? window.location.origin
+      : '';
+  return `${origin}${getPostPath(post)}`;
 }
 
 export function calculateReadTime(content: string): number {

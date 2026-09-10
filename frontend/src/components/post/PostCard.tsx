@@ -10,7 +10,7 @@ import {
 
 import { useAuth } from '../../lib/AuthContext';
 import { formatRelativeTime } from '../../lib/date';
-import { getProfilePath, deletePostFromSupabase } from '../../lib/posts';
+import { getProfilePath, getPostPath, deletePostFromSupabase } from '../../lib/posts';
 import { usePostLike } from '../../lib/usePostLike';
 import type { Post } from '../../types';
 import type { PostsStats } from '../../lib/interactions';
@@ -191,7 +191,7 @@ function PostCard({ post, onDeleted, stats = null }: PostCardProps) {
       )}
 
       {/* Content */}
-      <Link to={`/post/${post.slug}`} className="post-card__content">
+      <Link to={getPostPath(post)} className="post-card__content">
         <h2 className="post-card__title" id={titleId}>{post.title}</h2>
         <p className="post-card__excerpt">{post.excerpt}</p>
       </Link>
@@ -224,7 +224,7 @@ function PostCard({ post, onDeleted, stats = null }: PostCardProps) {
           </button>
 
           <Link
-            to={`/post/${post.slug}#comments`}
+            to={`${getPostPath(post)}#comments`}
             className="post-card__action"
             aria-label={`تعليقات — ${commentsCount}`}
           >
