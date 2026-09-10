@@ -36,6 +36,15 @@
   color: var(--color-muted);
   flex-shrink: 0;
   user-select: none;
+  overflow: hidden;
+}
+
+.post-card__avatar-image {
+  width: 100%;
+  height: 100%;
+  border-radius: var(--radius-full);
+  object-fit: cover;
+  display: block;
 }
 
 .post-card__author-meta {

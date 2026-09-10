@@ -1,6 +1,5 @@
 import { getSupabaseClient, supabase, API_BASE_URL } from './supabase';
 import type { Post } from '../types';
-import { MOCK_POSTS } from './mockData';
 
 /** Shape of a post row as returned by Supabase / the Express backend. */
 interface DbPostRow {
@@ -17,6 +16,7 @@ interface DbPostRow {
   author?: {
     id?: string | null;
     name?: string | null;
+    avatar_url?: string | null;
   } | null;
 }
 
@@ -70,6 +70,7 @@ function formatDbPost(item: DbPostRow): Post {
       id: item.author?.id || item.author_id || '',
       name: item.author?.name || 'كاتب حِبر',
       handle: (item.author?.name || 'author').toLowerCase().replace(/\s+/g, '-'),
+      avatarUrl: item.author?.avatar_url || '',
     },
   };
 }
@@ -175,11 +176,7 @@ export async function fetchAllPosts(): Promise<Post[]> {
     }
   }
 
-  // Merge database posts on top of mock posts (deduplicating by slug)
-  const existingSlugs = new Set(dbPostsList.map((p) => p.slug));
-  const remainingMocks = MOCK_POSTS.filter((p) => !existingSlugs.has(p.slug));
-
-  return [...dbPostsList, ...remainingMocks];
+  return dbPostsList;
 }
 
 /**

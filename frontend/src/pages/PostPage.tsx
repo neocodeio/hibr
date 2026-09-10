@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useAuth } from '../lib/AuthContext';
 import { supabase } from '../lib/supabase';
-import { MOCK_POSTS } from '../lib/mockData';
 import type { Post } from '../types';
 import './PostPage.css';
 
@@ -46,6 +45,7 @@ function PostPage() {
               id: data.author?.id || data.author_id,
               name: data.author?.name || 'كاتب حِبر',
               handle: (data.author?.name || 'author').toLowerCase().replace(/\s+/g, '-'),
+              avatarUrl: data.author?.avatar_url || '',
             },
           };
           setPost(formattedPost);
@@ -57,12 +57,6 @@ function PostPage() {
         console.warn('Error fetching post from Supabase:', err);
       }
 
-      // Fallback mock post
-      const mock = MOCK_POSTS.find((p) => p.slug === slug);
-      if (mock) {
-        setPost(mock);
-        setContent(mock.excerpt);
-      }
       setIsLoading(false);
     }
 

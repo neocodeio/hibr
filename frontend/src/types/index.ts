@@ -2,6 +2,7 @@ export interface Author {
   id: string;
   name: string;
   handle: string; // used in URL: /author/:handle
+  avatarUrl?: string; // author profile image (from users.avatar_url)
 }
 
 export interface Post {

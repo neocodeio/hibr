@@ -40,7 +40,16 @@ function PostCard({ post }: PostCardProps) {
       {/* Author row */}
       <div className="post-card__author-row">
         <div className="post-card__avatar" aria-hidden="true">
-          {getInitial(post.author.name)}
+          {post.author.avatarUrl ? (
+            <img
+              className="post-card__avatar-image"
+              src={post.author.avatarUrl}
+              alt=""
+              loading="lazy"
+            />
+          ) : (
+            getInitial(post.author.name)
+          )}
         </div>
         <div className="post-card__author-meta">
           <span className="post-card__author-name">{post.author.name}</span>
