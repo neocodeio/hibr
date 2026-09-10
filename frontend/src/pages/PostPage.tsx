@@ -5,6 +5,7 @@ import {
   BubbleChatIcon,
   Share01Icon,
   ArrowRight01Icon,
+  Clock01Icon,
 } from 'hugeicons-react';
 import { useAuth } from '../lib/AuthContext';
 import { supabase } from '../lib/supabase';
@@ -23,7 +24,8 @@ import Button from '../components/ui/Button';
 import './PostPage.css';
 
 function getInitial(name: string): string {
-  return name.trim().charAt(0);
+  const trimmed = name.trim();
+  return trimmed ? trimmed.charAt(0) : 'ح';
 }
 
 function scrollToComments() {
@@ -33,6 +35,13 @@ function scrollToComments() {
       : 'smooth',
     block: 'start',
   });
+}
+
+function formatReadTime(minutes: number): string {
+  if (minutes <= 1) return 'دقيقة واحدة';
+  if (minutes === 2) return 'دقيقتان';
+  if (minutes <= 10) return `${minutes} دقائق`;
+  return `${minutes} دقيقة`;
 }
 
 function PostPage() {
@@ -49,6 +58,7 @@ function PostPage() {
   const [content, setContent] = useState<string>('');
   const [isLoading, setIsLoading] = useState(true);
   const [isShareOpen, setIsShareOpen] = useState(false);
+  const [readProgress, setReadProgress] = useState(0);
 
   const [comments, setComments] = useState<PostComment[]>([]);
   const [commentsCount, setCommentsCount] = useState(0);
@@ -73,6 +83,28 @@ function PostPage() {
     setCommentsPostId(post.id);
     setCommentsLoading(true);
   }
+
+  // Reading progress bar — pure scroll position, no layout side effects.
+  useEffect(() => {
+    if (!post) return;
+    const onScroll = () => {
+      const el = document.documentElement;
+      const total = el.scrollHeight - el.clientHeight;
+      if (total <= 0) {
+        setReadProgress(0);
+        return;
+      }
+      const pct = Math.min(1, Math.max(0, el.scrollTop / total));
+      setReadProgress(pct);
+    };
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onScroll);
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      window.removeEventListener('resize', onScroll);
+    };
+  }, [post]);
 
   useEffect(() => {
     async function loadPost() {
@@ -170,10 +202,13 @@ function PostPage() {
         <div className="post-page__container" role="status" aria-live="polite">
           <span className="sr-only">جاري تحميل المقال...</span>
           <div className="post-page__skeleton" aria-hidden="true">
-            <div className="post-page__skeleton-back" />
+            <div className="post-page__skeleton-pill" />
             <div className="post-page__skeleton-title" />
             <div className="post-page__skeleton-title post-page__skeleton-title--short" />
-            <div className="post-page__skeleton-meta" />
+            <div className="post-page__skeleton-author">
+              <div className="post-page__skeleton-avatar" />
+              <div className="post-page__skeleton-meta" />
+            </div>
             <div className="post-page__skeleton-line" />
             <div className="post-page__skeleton-line" />
             <div className="post-page__skeleton-line" />
@@ -188,9 +223,10 @@ function PostPage() {
     return (
       <main className="post-page" id="main-content">
         <div className="post-page__not-found">
+          <p className="post-page__not-found-kicker">404</p>
           <h1>المقال غير موجود</h1>
-          <p>لم نتمكن من إيجاد المقال الذي تبحث عنه.</p>
-          <Link to="/" className="post-page__back">
+          <p>لم نتمكن من إيجاد المقال الذي تبحث عنه. ربما تم حذفه أو تغيّر رابطه.</p>
+          <Link to="/" className="post-page__back post-page__back--center">
             <ArrowRight01Icon size={16} strokeWidth={2} />
             <span>العودة إلى المقالات</span>
           </Link>
@@ -241,11 +277,29 @@ function PostPage() {
 
   return (
     <main className="post-page" id="main-content">
+      <div
+        className="post-page__progress"
+        aria-hidden="true"
+      >
+        <span style={{ transform: `scaleX(${readProgress})` }} />
+      </div>
+
       <div className="post-page__container">
-        <Link to="/" className="post-page__back">
-          <ArrowRight01Icon size={16} strokeWidth={2} />
-          <span>العودة إلى المقالات</span>
-        </Link>
+        <nav className="post-page__topbar" aria-label="تنقل المقال">
+          <Link to="/" className="post-page__back">
+            <ArrowRight01Icon size={16} strokeWidth={2} />
+            <span>المقالات</span>
+          </Link>
+          <button
+            type="button"
+            className="post-page__share-top"
+            onClick={() => setIsShareOpen(true)}
+            aria-label="مشاركة المقال"
+          >
+            <Share01Icon size={17} strokeWidth={1.75} />
+            <span>مشاركة</span>
+          </button>
+        </nav>
 
         <article className="post-page__article">
           <header className="post-page__header">
@@ -253,7 +307,7 @@ function PostPage() {
               <div className="post-page__tags" aria-label="وسوم المقال">
                 {post.tags.map((tag) => (
                   <span key={tag} className="post-page__tag">
-                    {tag}
+                    #{tag}
                   </span>
                 ))}
               </div>
@@ -263,35 +317,40 @@ function PostPage() {
 
             {post.excerpt && <p className="post-page__lede">{post.excerpt}</p>}
 
-            <div className="post-page__author-row">
-              <div className="post-page__avatar" aria-hidden="true">
-                {post.author.avatarUrl ? (
-                  <img
-                    className="post-page__avatar-image"
-                    src={post.author.avatarUrl}
-                    alt=""
-                    loading="lazy"
-                  />
-                ) : (
-                  <span className="post-page__avatar-fallback">
-                    {getInitial(post.author.name)}
+            <div className="post-page__byline">
+              <Link
+                to={getProfilePath(post.author)}
+                className="post-page__author"
+                aria-label={`الملف الشخصي لـ ${post.author.name}`}
+              >
+                <span className="post-page__avatar" aria-hidden="true">
+                  {post.author.avatarUrl ? (
+                    <img
+                      className="post-page__avatar-image"
+                      src={post.author.avatarUrl}
+                      alt=""
+                      loading="lazy"
+                    />
+                  ) : (
+                    <span className="post-page__avatar-fallback">
+                      {getInitial(post.author.name)}
+                    </span>
+                  )}
+                </span>
+                <span className="post-page__author-text">
+                  <span className="post-page__author-name">{post.author.name}</span>
+                  <span className="post-page__meta">
+                    <time dateTime={post.publishedAt}>
+                      {formatRelativeTime(post.publishedAt)}
+                    </time>
+                    <span className="post-page__dot" aria-hidden="true">·</span>
+                    <span className="post-page__readtime">
+                      <Clock01Icon size={13} strokeWidth={2} />
+                      {formatReadTime(post.readTime)}
+                    </span>
                   </span>
-                )}
-              </div>
-              <div className="post-page__author-meta">
-                <Link
-                  to={getProfilePath(post.author)}
-                  className="post-page__author-name"
-                  aria-label={`الملف الشخصي لـ ${post.author.name}`}
-                >
-                  {post.author.name}
-                </Link>
-                <div className="post-page__meta">
-                  <time dateTime={post.publishedAt}>
-                    {formatRelativeTime(post.publishedAt)}
-                  </time>
-                </div>
-              </div>
+                </span>
+              </Link>
             </div>
           </header>
 
@@ -302,33 +361,37 @@ function PostPage() {
           </div>
 
           <footer className="post-page__footer">
-            <div className="post-page__actions">
+            <div className="post-page__actions" role="group" aria-label="التفاعل مع المقال">
               <button
                 type="button"
                 className={`post-page__action${like.liked ? ' post-page__action--liked' : ''}`}
                 onClick={handleLike}
                 aria-pressed={like.liked}
-                aria-label={`أعجبني — ${like.likesCount}`}
+                aria-label={like.liked ? 'إلغاء الإعجاب' : 'أعجبني'}
               >
                 <FavouriteIcon
                   size={18}
-                  strokeWidth={1.5}
+                  strokeWidth={1.75}
                   fill={like.liked ? 'currentColor' : 'none'}
                 />
                 <span className="post-page__action-label">{like.likesCount}</span>
               </button>
 
+              <span className="post-page__divider" aria-hidden="true" />
+
               <button
                 type="button"
                 className="post-page__action"
                 onClick={scrollToComments}
-                aria-label={`تعليقات — ${commentsCount}`}
+                aria-label={`التعليقات — ${commentsCount}`}
               >
-                <BubbleChatIcon size={18} strokeWidth={1.5} />
+                <BubbleChatIcon size={18} strokeWidth={1.75} />
                 <span className="post-page__action-label">
-                  {commentsCount} تعليق
+                  {commentsCount}
                 </span>
               </button>
+
+              <span className="post-page__divider" aria-hidden="true" />
 
               <button
                 type="button"
@@ -336,10 +399,10 @@ function PostPage() {
                 onClick={() => setIsShareOpen(true)}
                 aria-label="مشاركة المقال"
               >
-                <Share01Icon size={18} strokeWidth={1.5} />
-                <span className="post-page__action-label">مشاركة</span>
+                <Share01Icon size={18} strokeWidth={1.75} />
               </button>
             </div>
+            <p className="post-page__hint">أعجبك المقال؟ شاركه مع من يهمه الأمر.</p>
           </footer>
         </article>
 
@@ -348,42 +411,58 @@ function PostPage() {
           className="post-page__comments"
           aria-label="التعليقات"
         >
-          <h2 className="post-page__comments-title">
-            التعليقات
-            <span className="post-page__comments-count">({commentsCount})</span>
-          </h2>
+          <div className="post-page__comments-head">
+            <h2 className="post-page__comments-title">
+              النقاش
+              <span className="post-page__comments-count">{commentsCount}</span>
+            </h2>
+          </div>
 
           {isAuthenticated && user ? (
             <form
               className="post-page__comment-form"
               onSubmit={handleCommentSubmit}
             >
-              {commentError && (
-                <p className="post-page__comment-error" role="alert">
-                  {commentError}
-                </p>
-              )}
-              <label htmlFor="comment-text" className="sr-only">
-                اكتب تعليقك
-              </label>
-              <textarea
-                id="comment-text"
-                className="post-page__comment-input"
-                rows={3}
-                placeholder="شارك رأيك في المقال..."
-                value={commentDraft}
-                onChange={(e) => setCommentDraft(e.target.value)}
-                disabled={commentPosting}
-              />
-              <div className="post-page__comment-actions">
-                <Button
-                  variant="primary"
-                  size="sm"
-                  type="submit"
-                  disabled={commentPosting || !commentDraft.trim()}
-                >
-                  {commentPosting ? 'جاري النشر...' : 'نشر التعليق'}
-                </Button>
+              <div className="post-page__comment-box">
+                <span className="post-page__comment-avatar" aria-hidden="true">
+                  {user.avatarUrl ? (
+                    <img src={user.avatarUrl} alt="" loading="lazy" />
+                  ) : (
+                    <span>{getInitial(user.name)}</span>
+                  )}
+                </span>
+                <div className="post-page__comment-field">
+                  {commentError && (
+                    <p className="post-page__comment-error" role="alert">
+                      {commentError}
+                    </p>
+                  )}
+                  <label htmlFor="comment-text" className="sr-only">
+                    اكتب تعليقك
+                  </label>
+                  <textarea
+                    id="comment-text"
+                    className="post-page__comment-input"
+                    rows={3}
+                    placeholder="شارك رأيك في المقال..."
+                    value={commentDraft}
+                    onChange={(e) => setCommentDraft(e.target.value)}
+                    disabled={commentPosting}
+                  />
+                  <div className="post-page__comment-actions">
+                    <span className="post-page__comment-hint">
+                      كن لطيفًا ومحترمًا في النقاش
+                    </span>
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      type="submit"
+                      disabled={commentPosting || !commentDraft.trim()}
+                    >
+                      {commentPosting ? 'جاري النشر...' : 'نشر التعليق'}
+                    </Button>
+                  </div>
+                </div>
               </div>
             </form>
           ) : (
@@ -397,11 +476,15 @@ function PostPage() {
 
           <div className="post-page__comment-list">
             {commentsLoading ? (
-              <p className="post-page__comment-status">جاري تحميل التعليقات...</p>
+              <div className="post-page__comment-loading" aria-live="polite">
+                <span className="post-page__spinner" aria-hidden="true" />
+                جاري تحميل التعليقات...
+              </div>
             ) : comments.length === 0 ? (
-              <p className="post-page__comment-status">
-                لا توجد تعليقات بعد. كن أول من يعلّق.
-              </p>
+              <div className="post-page__empty">
+                <BubbleChatIcon size={22} strokeWidth={1.5} />
+                <p>لا توجد تعليقات بعد.<br />كن أول من يبدأ النقاش.</p>
+              </div>
             ) : (
               comments.map((comment) => (
                 <article key={comment.id} className="post-page__comment">
