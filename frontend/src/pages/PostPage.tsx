@@ -22,7 +22,7 @@ function PostPage() {
       try {
         const { data, error } = await supabase
           .from('posts')
-          .select('*, author:users(*)')
+          .select('*, author:users!posts_author_id_fkey(*)')
           .eq('slug', slug)
           .single();
 

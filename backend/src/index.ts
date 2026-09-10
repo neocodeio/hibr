@@ -11,7 +11,32 @@ const PORT = process.env.PORT || 5000;
 
 // Initialize Supabase Admin Client (Service Role Key or Anon Key)
 const supabaseUrl = process.env.SUPABASE_URL || 'https://wmfftwbgjgrafustxwxd.supabase.co';
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || 'sb_publishable_bZ5L5IoCYAiyXdctUR1zHQ_SWSYeEb-';
+
+/**
+ * Pick the first usable Supabase key from the environment, skipping leftover
+ * template placeholders (e.g. "your_supabase_service_role_key_here") that
+ * would otherwise make every request fail with "Invalid API key".
+ */
+function resolveSupabaseKey(): string {
+  const candidates = [
+    process.env.SUPABASE_SERVICE_ROLE_KEY,
+    process.env.SUPABASE_ANON_KEY,
+  ];
+  return (
+    candidates.find(
+      (key) => key && !/your_|example|changeme|placeholder|^xxx/i.test(key.trim())
+    ) || ''
+  ).trim();
+}
+
+const supabaseKey = resolveSupabaseKey();
+
+if (!supabaseKey) {
+  console.warn(
+    '⚠️ No valid Supabase key found in backend/.env — set SUPABASE_SERVICE_ROLE_KEY ' +
+      '(or SUPABASE_ANON_KEY for read-only access).'
+  );
+}
 
 const supabaseAdmin = createClient(supabaseUrl, supabaseKey);
 
@@ -142,7 +167,7 @@ app.post('/api/users/sync', asyncHandler(async (req, res) => {
 app.get('/api/posts', asyncHandler(async (req, res) => {
   const { data, error } = await supabaseAdmin
     .from('posts')
-    .select('*, author:users(*)')
+    .select('*, author:users!posts_author_id_fkey(*)')
     .eq('is_published', true)
     .order('created_at', { ascending: false });
 
@@ -199,7 +224,7 @@ app.post('/api/posts', asyncHandler(async (req, res) => {
         created_at: now,
       },
     ])
-    .select('*, author:users(*)')
+    .select('*, author:users!posts_author_id_fkey(*)')
     .single();
 
   if (error) {

@@ -22,6 +22,9 @@ function CreatePostModal({ isOpen, onClose, onPostCreated }: CreatePostModalProp
 
   const estimatedReadTime = calculateReadTime(content);
 
+  // Guard: the author identity is required to save anything to the database.
+  const canPublish = Boolean(user?.id && user.id !== 'anonymous');
+
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
@@ -57,12 +60,20 @@ function CreatePostModal({ isOpen, onClose, onPostCreated }: CreatePostModalProp
     setErrorMsg('');
 
     try {
+      if (!canPublish) {
+        throw new Error('يجب تسجيل الدخول لنشر المقال.');
+      }
+
       const token = await getSupabaseToken();
       const newPost = await createPostInSupabase(
         { title, excerpt, content },
         token,
-        user?.id || 'anonymous',
-        user?.name || 'كاتب حِبر'
+        {
+          id: user!.id,
+          name: user!.name,
+          email: user!.email,
+          avatarUrl: user!.avatarUrl,
+        }
       );
 
       if (onPostCreated) {
@@ -77,7 +88,11 @@ function CreatePostModal({ isOpen, onClose, onPostCreated }: CreatePostModalProp
       onClose();
     } catch (err: unknown) {
       console.error('Error publishing post:', err);
-      setErrorMsg('حدث خطأ أثناء نشر المقال، يرجى المحاولة مرة أخرى.');
+      setErrorMsg(
+        err instanceof Error && err.message
+          ? err.message
+          : 'حدث خطأ أثناء نشر المقال، يرجى المحاولة مرة أخرى.'
+      );
       setIsSubmitting(false);
     }
   };

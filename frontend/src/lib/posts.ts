@@ -20,6 +20,14 @@ interface DbPostRow {
   } | null;
 }
 
+/** Minimal author profile needed to persist posts (and the author row). */
+export interface AuthorProfile {
+  id: string;
+  name: string;
+  email: string;
+  avatarUrl: string;
+}
+
 export interface CreatePostPayload {
   title: string;
   excerpt: string;
@@ -34,7 +42,7 @@ export function generateSlug(title: string): string {
     .replace(/[^\w\u0621-\u064A\s-]/g, '')
     .replace(/\s+/g, '-');
   const uniqueId = Date.now().toString(36).slice(-4);
-  return `${base}-${uniqueId}`;
+  return `${base}-${uniqueId}` || `post-${uniqueId}`;
 }
 
 export function calculateReadTime(content: string): number {
@@ -67,6 +75,71 @@ function formatDbPost(item: DbPostRow): Post {
 }
 
 /**
+ * Ensure a row for this author exists in public.users before inserting a post.
+ * posts.author_id has a foreign key to users(id), so the insert fails with a
+ * FK violation when the author row is missing (sync on login may have failed).
+ * Order: client upsert with the Clerk JWT → backend admin upsert (bypasses RLS).
+ */
+async function ensureAuthorExists(
+  profile: AuthorProfile,
+  clerkToken: string | null
+): Promise<void> {
+  // 1. Does the author already exist? (SELECT is open to everyone via RLS)
+  try {
+    const { data } = await supabase
+      .from('users')
+      .select('id')
+      .eq('id', profile.id)
+      .maybeSingle();
+    if (data) return; // author exists — nothing to do
+  } catch {
+    // Fall through and attempt the upsert anyway.
+  }
+
+  const userRecord = {
+    id: profile.id,
+    email: profile.email || `${profile.id}@user.hibr`,
+    name: profile.name || 'كاتب حِبر',
+    avatar_url: profile.avatarUrl || '',
+    updated_at: new Date().toISOString(),
+  };
+
+  // 2. Client-side upsert (requires a valid Clerk JWT for the RLS policy)
+  if (clerkToken) {
+    try {
+      const client = getSupabaseClient(clerkToken);
+      const { error } = await client
+        .from('users')
+        .upsert(userRecord, { onConflict: 'id' });
+      if (!error) return;
+      console.warn('Author client-side upsert failed:', error.message);
+    } catch (err) {
+      console.warn('Author client-side upsert error:', err);
+    }
+  }
+
+  // 3. Backend admin upsert (service role key — bypasses RLS)
+  const res = await fetch(`${API_BASE_URL}/api/users/sync`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      id: profile.id,
+      email: profile.email,
+      name: profile.name,
+      avatarUrl: profile.avatarUrl,
+    }),
+  }).catch(() => null);
+
+  if (!res || !res.ok) {
+    const detail = res ? `status ${res.status}` : 'backend unreachable';
+    throw new Error(
+      `Could not create the author profile in the database (${detail}). ` +
+        `Is the backend running on ${API_BASE_URL}?`
+    );
+  }
+}
+
+/**
  * Fetch all posts from Supabase database (or Express backend API)
  */
 export async function fetchAllPosts(): Promise<Post[]> {
@@ -76,7 +149,7 @@ export async function fetchAllPosts(): Promise<Post[]> {
   try {
     const { data, error } = await supabase
       .from('posts')
-      .select('*, author:users(*)')
+      .select('*, author:users!posts_author_id_fkey(*)')
       .eq('is_published', true)
       .order('created_at', { ascending: false });
 
@@ -110,20 +183,21 @@ export async function fetchAllPosts(): Promise<Post[]> {
 }
 
 /**
- * Create a new post in Supabase with Express Backend fallback
+ * Create a new post: client-side Supabase insert first, Express backend as
+ * failsafe. Throws with the real error when both paths fail — never returns
+ * a fake, unsaved post.
  */
 export async function createPostInSupabase(
   payload: CreatePostPayload,
   clerkToken: string | null,
-  userId: string,
-  userName: string
+  profile: AuthorProfile
 ): Promise<Post> {
   const slug = generateSlug(payload.title);
   const readTime = calculateReadTime(payload.content);
   const now = new Date().toISOString();
 
   const postRecord = {
-    author_id: userId,
+    author_id: profile.id,
     title: payload.title.trim(),
     slug,
     excerpt: payload.excerpt.trim() || payload.content.trim().slice(0, 160) + '...',
@@ -136,51 +210,68 @@ export async function createPostInSupabase(
     created_at: now,
   };
 
+  const errors: string[] = [];
   let savedPost: DbPostRow | null = null;
 
-  // 1. Attempt Client-side Supabase insert
-  try {
-    const client = getSupabaseClient(clerkToken);
-    const { data, error } = await client
-      .from('posts')
-      .insert([postRecord])
-      .select('*, author:users(*)')
-      .single();
+  // 0. The author row must exist or the posts insert fails (FK constraint)
+  await ensureAuthorExists(profile, clerkToken);
 
-    if (!error && data) {
-      savedPost = data;
-    } else {
-      console.warn('Client Supabase insert fallback to Backend API:', error?.message);
+  // 1. Attempt client-side Supabase insert (RLS enforced with the Clerk JWT)
+  if (clerkToken) {
+    try {
+      const client = getSupabaseClient(clerkToken);
+      const { data, error } = await client
+        .from('posts')
+        .insert([postRecord])
+        .select('*, author:users!posts_author_id_fkey(*)')
+        .single();
+
+      if (!error && data) {
+        savedPost = data;
+      } else if (error) {
+        console.error('Client Supabase insert failed:', error.message);
+        errors.push(`Supabase: ${error.message}`);
+      }
+    } catch (err) {
+      console.error('Supabase client insert error:', err);
+      errors.push(`Supabase: ${err instanceof Error ? err.message : String(err)}`);
     }
-  } catch (err) {
-    console.warn('Supabase client insert error:', err);
+  } else {
+    errors.push(
+      'Supabase: no Clerk JWT — configure the "supabase" JWT template in Clerk'
+    );
   }
 
-  // 2. Failsafe: Express Backend API insert (bypasses RLS issues)
+  // 2. Failsafe: Express backend API insert (service role key bypasses RLS)
   if (!savedPost) {
     try {
       const res = await fetch(`${API_BASE_URL}/api/posts`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          authorId: userId,
+          authorId: profile.id,
           title: payload.title,
           slug,
           excerpt: payload.excerpt,
           content: payload.content,
           readTime,
-          authorName: userName,
+          authorName: profile.name,
         }),
       });
 
-      if (res.ok) {
-        const json = await res.json();
-        if (json.success && json.post) {
-          savedPost = json.post;
-        }
+      const json = await res.json().catch(() => null);
+
+      if (res.ok && json?.success && json?.post) {
+        savedPost = json.post;
+      } else {
+        const message = json?.error || `HTTP ${res.status}`;
+        console.error('Backend API post creation failed:', message);
+        errors.push(`Backend: ${message}`);
       }
     } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
       console.error('Backend API post creation error:', err);
+      errors.push(`Backend: ${message}`);
     }
   }
 
@@ -188,19 +279,9 @@ export async function createPostInSupabase(
     return formatDbPost(savedPost);
   }
 
-  return {
-    id: String(Date.now()),
-    slug,
-    title: payload.title,
-    excerpt: payload.excerpt || payload.content.slice(0, 160) + '...',
-    publishedAt: 'الآن',
-    readTime,
-    likesCount: 0,
-    commentsCount: 0,
-    author: {
-      id: userId,
-      name: userName,
-      handle: userName.toLowerCase().replace(/\s+/g, '-'),
-    },
-  };
+  // Both save paths failed — surface the real error instead of faking success.
+  throw new Error(
+    `فشل حفظ المقال في قاعدة البيانات. ${errors.join(' | ')}` ||
+      'فشل حفظ المقال في قاعدة البيانات.'
+  );
 }
