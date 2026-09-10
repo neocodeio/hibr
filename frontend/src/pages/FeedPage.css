@@ -55,11 +55,11 @@
   border-bottom-color: var(--color-ink);
 }
 
-/* ── Post list ──────────────────────────────────────────────── */
+/* ── Post list — editorial rows separated by hairline dividers ── */
 .feed__list {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  gap: 0;
   padding-top: var(--space-5);
   padding-bottom: var(--space-20);
 }
