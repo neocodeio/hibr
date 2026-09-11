@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './lib/AuthContext';
 import { ThemeProvider } from './lib/ThemeProvider';
@@ -8,9 +9,11 @@ import CreatePostModal from './components/post/CreatePostModal';
 import FeedPage from './pages/FeedPage';
 import PostPage from './pages/PostPage';
 import ProfilePage from './pages/ProfilePage';
+import SavedPage from './pages/SavedPage';
 import { getPostPath } from './lib/posts';
 import { notifyPostCreated } from './lib/postEvents';
 import { PostsProvider } from './lib/PostsContext';
+import { SocialProvider } from './lib/SocialContext';
 import type { Post } from './types';
 
 // Mounted once inside the Router + Auth providers so the composer works
@@ -39,24 +42,36 @@ function GlobalCreatePostModal() {
   );
 }
 
+// Keyed by viewer so SocialProvider remounts with fresh ids on
+// sign-in/sign-out instead of leaking one session's state into the next.
+function AppShell({ children }: { children: ReactNode }) {
+  const { user } = useAuth();
+  return (
+    <PostsProvider>
+      <SocialProvider key={user?.id ?? 'guest'}>{children}</SocialProvider>
+    </PostsProvider>
+  );
+}
+
 function App() {
   return (
     <BrowserRouter>
       <ThemeProvider>
         <AuthProvider>
-          <PostsProvider>
+          <AppShell>
             <Navbar />
             <Routes>
               <Route path="/" element={<FeedPage />} />
               <Route path="/post/:slug" element={<PostPage />} />
               <Route path="/profile/:username" element={<ProfilePage />} />
+              <Route path="/saved" element={<SavedPage />} />
               {/* Unknown URLs redirect home instead of rendering a blank page */}
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
             {/* <Footer /> */}
             <AuthModal />
             <GlobalCreatePostModal />
-          </PostsProvider>
+          </AppShell>
         </AuthProvider>
       </ThemeProvider>
     </BrowserRouter>

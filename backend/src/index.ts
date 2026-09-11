@@ -162,6 +162,21 @@ function isHttpUrl(value: unknown): boolean {
 }
 
 /**
+ * True when a Supabase error means the named column doesn't exist yet
+ * (table predates a migration or the PostgREST schema cache is stale).
+ */
+function isMissingColumnError(err: unknown, column: string): boolean {
+  if (!err || typeof err !== 'object') return false;
+  const record = err as { code?: unknown; message?: unknown };
+  if (record.code === 'PGRST204') return true;
+  return (
+    typeof record.message === 'string' &&
+    record.message.toLowerCase().includes(column.toLowerCase()) &&
+    /column|schema/i.test(record.message)
+  );
+}
+
+/**
  * 500 responses never leak driver internals. In development the real message
  * is returned for debuggability; in production callers get a generic message
  * while the details stay in the server logs.
@@ -335,7 +350,7 @@ app.get('/api/posts', asyncHandler(async (req, res) => {
 
 // Create a new post endpoint
 app.post('/api/posts', writeLimiter, asyncHandler(async (req, res) => {
-  const { authorId, title, slug, excerpt, content, readTime, authorName } = req.body ?? {};
+  const { authorId, title, slug, excerpt, content, readTime, authorName, tags } = req.body ?? {};
 
   if (!isNonEmptyString(authorId, MAX_ID_LENGTH) || !isNonEmptyString(title, MAX_TITLE_LENGTH) || !isNonEmptyString(content, MAX_CONTENT_LENGTH)) {
     return res.status(400).json({ error: 'Missing required post fields' });
@@ -345,6 +360,26 @@ app.post('/api/posts', writeLimiter, asyncHandler(async (req, res) => {
   }
   if (slug !== undefined && (typeof slug !== 'string' || !SLUG_RE.test(slug))) {
     return res.status(400).json({ error: 'Invalid post fields' });
+  }
+  // Tags are optional; each must be a short non-empty string, max 5.
+  let cleanTags: string[] = [];
+  if (tags !== undefined) {
+    if (!Array.isArray(tags)) {
+      return res.status(400).json({ error: 'Invalid post fields' });
+    }
+    const seen = new Set<string>();
+    for (const item of tags) {
+      if (typeof item !== 'string') {
+        return res.status(400).json({ error: 'Invalid post fields' });
+      }
+      const tag = item.trim().slice(0, 30);
+      if (!tag) continue;
+      const key = tag.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      cleanTags.push(tag);
+      if (cleanTags.length >= 5) break;
+    }
   }
   const readTimeMinutes =
     readTime === undefined
@@ -376,25 +411,34 @@ app.post('/api/posts', writeLimiter, asyncHandler(async (req, res) => {
   }
 
   const now = new Date().toISOString();
-  const { data, error } = await supabaseAdmin
-    .from('posts')
-    .insert([
-      {
-        author_id: authorId,
-        title: title.trim(),
-        slug: slug || `${Date.now()}`,
-        excerpt: excerpt || content.slice(0, 160) + '...',
-        content: content.trim(),
-        read_time: readTimeMinutes,
-        likes_count: 0,
-        comments_count: 0,
-        is_published: true,
-        published_at: now,
-        created_at: now,
-      },
-    ])
-    .select('*, author:users!posts_author_id_fkey(*)')
-    .single();
+  const baseRow = {
+    author_id: authorId,
+    title: title.trim(),
+    slug: slug || `${Date.now()}`,
+    excerpt: excerpt || content.slice(0, 160) + '...',
+    content: content.trim(),
+    read_time: readTimeMinutes,
+    likes_count: 0,
+    comments_count: 0,
+    is_published: true,
+    published_at: now,
+    created_at: now,
+  };
+  const insertRow = (withTags: boolean) =>
+    supabaseAdmin
+      .from('posts')
+      .insert([withTags && cleanTags.length > 0 ? { ...baseRow, tags: cleanTags } : baseRow])
+      .select('*, author:users!posts_author_id_fkey(*)')
+      .single();
+
+  let { data, error } = await insertRow(true);
+
+  // Pre-migration tables have no tags column — retry bare so the post
+  // still saves (tags apply once the migration runs).
+  if (error && cleanTags.length > 0 && isMissingColumnError(error, 'tags')) {
+    console.warn('Tags column missing, retrying post insert without tags.');
+    ({ data, error } = await insertRow(false));
+  }
 
   if (error) {
     return serverError(res, error, 'Could not create post');

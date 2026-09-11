@@ -1,41 +1,142 @@
+import { useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import PostCard from '../components/post/PostCard';
 import { usePosts } from '../lib/PostsContext';
+import { useAuth } from '../lib/AuthContext';
+import { useSocial } from '../lib/SocialContext';
 import './FeedPage.css';
 
-// const TABS = [
-//   { id: 'all', label: 'الكل' },
-//   { id: 'trending', label: 'ترند' },
-//   { id: 'new', label: 'جديد' },
-// ];
+const MAX_TAG_CHIPS = 8;
+
+type FeedTab = 'all' | 'following';
+
+function pluralPosts(count: number): string {
+  if (count === 1) return 'مقال';
+  if (count === 2) return 'مقالين';
+  if (count <= 10) return 'مقالات';
+  return 'مقال';
+}
 
 function FeedPage() {
   // Posts are cached app-wide (PostsProvider loads once). Returning to the
   // feed never refetches — it renders the cached list instantly.
   const { posts, stats, isLoading, hasLoaded, removePost } = usePosts();
+  const { isAuthenticated } = useAuth();
+  const { followingIds, followsOn } = useSocial();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTag = searchParams.get('tag') ?? '';
+  // Search query lives in the URL (?q=) — set from the navbar from anywhere.
+  const query = searchParams.get('q') ?? '';
+  const [feedTab, setFeedTab] = useState<FeedTab>('all');
 
   const showInitialLoading = isLoading && !hasLoaded;
+  const showFollowingTab = isAuthenticated && followsOn;
+
+  // Most used tags across cached posts — instant, no extra queries.
+  const topTags = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const post of posts) {
+      for (const tag of post.tags ?? []) {
+        counts.set(tag, (counts.get(tag) ?? 0) + 1);
+      }
+    }
+    return [...counts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, MAX_TAG_CHIPS)
+      .map(([tag]) => tag);
+  }, [posts]);
+
+  const filtered = useMemo(() => {
+    const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    return posts.filter((post) => {
+      if (feedTab === 'following' && !followingIds.has(post.author.id)) return false;
+      if (activeTag && !(post.tags ?? []).includes(activeTag)) return false;
+      if (words.length === 0) return true;
+      const haystack =
+        `${post.title}\n${post.excerpt}\n${post.author.name}\n${(post.tags ?? []).join(' ')}`.toLowerCase();
+      return words.every((word) => haystack.includes(word));
+    });
+  }, [posts, query, activeTag, feedTab, followingIds]);
+
+  const isFiltering = query.trim().length > 0 || activeTag.length > 0 || feedTab === 'following';
+
+  const setTag = (tag: string) => {
+    const next = new URLSearchParams(searchParams);
+    if (tag) next.set('tag', tag);
+    else next.delete('tag');
+    setSearchParams(next, { replace: true });
+  };
+
+  const clearFilters = () => {
+    setSearchParams({}, { replace: true });
+    setFeedTab('all');
+  };
 
   return (
     <main className="feed" id="main-content">
       <div className="feed__wrapper">
         {/* Tab bar */}
-        <div className="feed__bar" role="tablist" aria-label="قائمة المقالات">
-          {/* <div className="feed__tabs">
-            {TABS.map((tab) => (
-              <button
-                key={tab.id}
-                role="tab"
-                aria-selected={activeTab === tab.id}
-                className={`feed__tab${activeTab === tab.id ? ' feed__tab--active' : ''}`}
-                onClick={() => setActiveTab(tab.id)}
-                type="button"
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div> */}
+        <div className="feed__bar">
           <h1>المقالات</h1>
         </div>
+
+        {/* Feed tabs */}
+        {showFollowingTab && (
+          <div className="feed__tabs" role="tablist" aria-label="نوع المقالات">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={feedTab === 'all'}
+              className={`feed__tab${feedTab === 'all' ? ' feed__tab--active' : ''}`}
+              onClick={() => setFeedTab('all')}
+            >
+              الكل
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={feedTab === 'following'}
+              className={`feed__tab${feedTab === 'following' ? ' feed__tab--active' : ''}`}
+              onClick={() => setFeedTab('following')}
+            >
+              اللي أتابعهم
+            </button>
+          </div>
+        )}
+
+        {/* Tag chips */}
+        {topTags.length > 0 && (
+          <div className="feed__tags" role="group" aria-label="فلترة بالوسوم">
+            {topTags.map((tag) => (
+              <button
+                key={tag}
+                type="button"
+                className={`feed__tag${activeTag === tag ? ' feed__tag--active' : ''}`}
+                onClick={() => setTag(activeTag === tag ? '' : tag)}
+                aria-pressed={activeTag === tag}
+              >
+                #{tag}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Active filter summary */}
+        {isFiltering && !showInitialLoading && (
+          <div className="feed__filter-meta">
+            <span className="feed__filter-count">
+              {filtered.length} {pluralPosts(filtered.length)}
+              {activeTag ? ` بوسم ${activeTag}` : ''}
+            </span>
+            <button
+              type="button"
+              className="feed__filter-clear"
+              onClick={clearFilters}
+            >
+              امسح الفلتر
+            </button>
+          </div>
+        )}
 
         {/* Post list */}
         <section className="feed__list" aria-label="قائمة المقالات">
@@ -44,12 +145,31 @@ function FeedPage() {
             <div className="feed__loading" style={{ padding: '2rem 0', textAlign: 'center', color: 'var(--color-muted)' }}>
               نحمّل المقالات...
             </div>
-          ) : posts.length === 0 ? (
+          ) : filtered.length === 0 ? (
             <div className="feed__loading" style={{ padding: '2rem 0', textAlign: 'center', color: 'var(--color-muted)' }}>
-              ما فيه مقالات للحين.
+              {feedTab === 'following' && !query.trim() && !activeTag ? (
+                followingIds.size === 0 ? (
+                  <p>ما تتابع أحد للحين — تابع كتّاب يعجبونك وتشوف مقالاتهم هنا.</p>
+                ) : (
+                  <p>اللي تتابعهم ما نشروا شي للحين.</p>
+                )
+              ) : isFiltering ? (
+                <>
+                  <p style={{ marginBottom: '1rem' }}>ما لقينا شي يطابق بحثك.</p>
+                  <button
+                    type="button"
+                    className="feed__filter-clear"
+                    onClick={clearFilters}
+                  >
+                    امسح الفلتر
+                  </button>
+                </>
+              ) : (
+                'ما فيه مقالات للحين.'
+              )}
             </div>
           ) : (
-            posts.map((post) => (
+            filtered.map((post) => (
               <PostCard
                 key={post.id}
                 post={post}

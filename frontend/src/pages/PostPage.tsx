@@ -4,10 +4,12 @@ import {
   FavouriteIcon,
   BubbleChatIcon,
   Share01Icon,
+  Bookmark02Icon,
   ArrowRight01Icon,
   Clock01Icon,
 } from 'hugeicons-react';
 import { useAuth } from '../lib/AuthContext';
+import { useSocial } from '../lib/SocialContext';
 import { supabase } from '../lib/supabase';
 import { formatRelativeTime } from '../lib/date';
 import { getProfilePath, normalizeSlugParam } from '../lib/posts';
@@ -76,6 +78,7 @@ function PostPage() {
     post?.likesCount || 0
   );
   const { sync: syncLike } = like;
+  const { bookmarkIds, bookmarksOn, toggleBookmark } = useSocial();
 
   // Reset the comments loading flag whenever a different post is shown
   // (render-phase derived state — the effect below only clears it).
@@ -275,6 +278,12 @@ function PostPage() {
     void like.toggle();
   };
 
+  const isSaved = post ? bookmarkIds.has(post.id) : false;
+
+  const handleBookmark = () => {
+    if (post) void toggleBookmark(post.id);
+  };
+
   const handleCommentSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) {
@@ -433,6 +442,26 @@ function PostPage() {
               >
                 <Share01Icon size={18} strokeWidth={1.75} />
               </button>
+
+              {bookmarksOn && (
+                <>
+                  <span className="post-page__divider" aria-hidden="true" />
+
+                  <button
+                    type="button"
+                    className={`post-page__action${isSaved ? ' post-page__action--saved' : ''}`}
+                    onClick={handleBookmark}
+                    aria-pressed={isSaved}
+                    aria-label={isSaved ? 'محفوظ' : 'احفظ المقال'}
+                  >
+                    <Bookmark02Icon
+                      size={18}
+                      strokeWidth={1.75}
+                      fill={isSaved ? 'currentColor' : 'none'}
+                    />
+                  </button>
+                </>
+              )}
             </div>
             <p className="post-page__hint">عجبك المقال؟ شاركه مع اللي يستاهل يقراه.</p>
           </footer>

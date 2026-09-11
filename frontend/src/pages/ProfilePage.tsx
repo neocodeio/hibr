@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowRight01Icon } from 'hugeicons-react';
+import { ArrowRight01Icon, UserAdd01Icon, UserCheck01Icon } from 'hugeicons-react';
 import { useAuth } from '../lib/AuthContext';
+import { useSocial } from '../lib/SocialContext';
 import { supabase } from '../lib/supabase';
 import { formatDbPost } from '../lib/posts';
 import { fetchPostsStats, subscribePostsRealtime } from '../lib/interactions';
 import type { PostsStats } from '../lib/interactions';
+import { fetchFollowCounts } from '../lib/social';
 import type { Post } from '../types';
 import PostCard from '../components/post/PostCard';
 import Button from '../components/ui/Button';
@@ -23,6 +25,13 @@ function getInitial(name: string): string {
   return name.trim().charAt(0);
 }
 
+function pluralFollowers(count: number): string {
+  if (count === 1) return 'متابِع';
+  if (count === 2) return 'متابِعين';
+  if (count <= 10) return 'متابِعين';
+  return 'متابِع';
+}
+
 function ProfilePage() {
   const { username: profileKey } = useParams<{ username: string }>();
   const {
@@ -36,6 +45,10 @@ function ProfilePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [stats, setStats] = useState<PostsStats | null>(null);
+  const [followerCount, setFollowerCount] = useState(0);
+  const [followingCount, setFollowingCount] = useState(0);
+  const [followBusy, setFollowBusy] = useState(false);
+  const { followingIds, followsOn, toggleFollow } = useSocial();
 
   const handlePostDeleted = (postId: string) => {
     setPosts((prev) => prev.filter((post) => post.id !== postId));
@@ -132,6 +145,21 @@ function ProfilePage() {
     loadProfile();
   }, [profileKey]);
 
+  // Follower counts for the shown profile (public, cheap count queries).
+  useEffect(() => {
+    if (!profile || !followsOn) return;
+    let cancelled = false;
+    fetchFollowCounts(profile.id).then((counts) => {
+      if (!cancelled) {
+        setFollowerCount(counts.followers);
+        setFollowingCount(counts.following);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [profile, followsOn, followingIds]);
+
   if (isLoading) {
     return (
       <main className="profile-page" id="main-content">
@@ -166,6 +194,18 @@ function ProfilePage() {
   }
 
   const isOwnProfile = currentUser?.id === profile.id;
+  const isFollowing = profile ? followingIds.has(profile.id) : false;
+  const showFollowButton = followsOn && !isOwnProfile;
+
+  const handleFollow = async () => {
+    if (!profile || followBusy) return;
+    setFollowBusy(true);
+    try {
+      await toggleFollow(profile.id);
+    } finally {
+      setFollowBusy(false);
+    }
+  };
 
   return (
     <main className="profile-page" id="main-content">
@@ -202,7 +242,36 @@ function ProfilePage() {
             </p>
             <p className="profile-page__stats">
               {posts.length} {posts.length === 1 ? 'مقال' : 'مقالات'}
+              {followsOn && (
+                <>
+                  <span aria-hidden="true"> · </span>
+                  <span>
+                    {followerCount} {pluralFollowers(followerCount)}
+                  </span>
+                  <span aria-hidden="true"> · </span>
+                  <span>يتابع {followingCount}</span>
+                </>
+              )}
             </p>
+            {showFollowButton && (
+              <div className="profile-page__follow">
+                <Button
+                  variant={isFollowing ? 'ghost' : 'primary'}
+                  size="sm"
+                  onClick={handleFollow}
+                  disabled={followBusy}
+                >
+                  <span className="profile-page__follow-inner">
+                    {isFollowing ? (
+                      <UserCheck01Icon size={16} strokeWidth={2} />
+                    ) : (
+                      <UserAdd01Icon size={16} strokeWidth={2} />
+                    )}
+                    {followBusy ? 'لحظة...' : isFollowing ? 'أتابعه' : 'تابع'}
+                  </span>
+                </Button>
+              </div>
+            )}
           </div>
         </header>
 

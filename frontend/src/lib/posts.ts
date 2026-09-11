@@ -13,6 +13,7 @@ export interface DbPostRow {
   likes_count?: number | null;
   comments_count?: number | null;
   author_id?: string | null;
+  tags?: unknown;
   author?: {
     id?: string | null;
     name?: string | null;
@@ -92,7 +93,53 @@ export function calculateReadTime(content: string): number {
   return Math.max(1, Math.ceil(words / 200));
 }
 
+export const MAX_TAGS_PER_POST = 5;
+export const MAX_TAG_LENGTH = 30;
+
+/**
+ * Clean a raw tags list: trim, drop empties, dedupe (case-insensitive for
+ * Latin script), cap length and count. Never throws.
+ */
+export function normalizeTags(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const item of raw) {
+    if (typeof item !== 'string') continue;
+    const tag = item.trim().slice(0, MAX_TAG_LENGTH);
+    if (!tag) continue;
+    const key = tag.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(tag);
+    if (out.length >= MAX_TAGS_PER_POST) break;
+  }
+  return out;
+}
+
+/** Split a free-text tags field (commas — Arabic or Latin — or newlines). */
+export function parseTagsInput(value: string): string[] {
+  return normalizeTags(value.split(/[،,\n]+/));
+}
+
+/**
+ * True when a Supabase error means "the tags column doesn't exist yet"
+ * (table predates the migration or the PostgREST schema cache is stale).
+ * Callers use it to retry the write without tags instead of failing.
+ */
+export function isMissingTagsColumnError(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+  const record = err as { code?: unknown; message?: unknown };
+  if (record.code === 'PGRST204') return true;
+  return (
+    typeof record.message === 'string' &&
+    /tags/i.test(record.message) &&
+    /column|schema/i.test(record.message)
+  );
+}
+
 export function formatDbPost(item: DbPostRow): Post {
+  const tags = normalizeTags(item.tags);
   return {
     id: item.id,
     slug: item.slug,
@@ -102,6 +149,7 @@ export function formatDbPost(item: DbPostRow): Post {
     readTime: item.read_time || 5,
     likesCount: item.likes_count || 0,
     commentsCount: item.comments_count || 0,
+    tags: tags.length > 0 ? tags : undefined,
     author: {
       id: item.author?.id || item.author_id || '',
       name: item.author?.name || 'كاتب حِبر',
@@ -303,8 +351,9 @@ export async function createPostInSupabase(
   const slug = generateSlug(payload.title);
   const readTime = calculateReadTime(payload.content);
   const now = new Date().toISOString();
+  const tags = normalizeTags(payload.tags);
 
-  const postRecord = {
+  const baseRecord = {
     author_id: profile.id,
     title: payload.title.trim(),
     slug,
@@ -317,6 +366,10 @@ export async function createPostInSupabase(
     published_at: now,
     created_at: now,
   };
+  // Tags ride along when the column exists; when it doesn't yet (table
+  // predates the migration), the insert is retried without them below so
+  // publishing never breaks.
+  const postRecord = tags.length > 0 ? { ...baseRecord, tags } : baseRecord;
 
   const errors: string[] = [];
   let savedPost: DbPostRow | null = null;
@@ -328,11 +381,21 @@ export async function createPostInSupabase(
   if (clerkToken) {
     try {
       const client = getSupabaseClient(clerkToken);
-      const { data, error } = await client
-        .from('posts')
-        .insert([postRecord])
-        .select('*, author:users!posts_author_id_fkey(*)')
-        .single();
+      const insertRows = async (row: typeof postRecord) =>
+        client
+          .from('posts')
+          .insert([row])
+          .select('*, author:users!posts_author_id_fkey(*)')
+          .single();
+
+      let { data, error } = await insertRows(postRecord);
+
+      // Pre-migration tables have no tags column — retry bare so the post
+      // still saves (tags apply once the migration runs).
+      if (error && tags.length > 0 && isMissingTagsColumnError(error)) {
+        console.warn('Tags column missing, retrying post insert without tags.');
+        ({ data, error } = await insertRows(baseRecord));
+      }
 
       if (!error && data) {
         savedPost = data;
@@ -364,6 +427,7 @@ export async function createPostInSupabase(
           content: payload.content,
           readTime,
           authorName: profile.name,
+          tags,
         }),
       });
 

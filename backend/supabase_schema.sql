@@ -49,6 +49,11 @@ CREATE TABLE IF NOT EXISTS public.posts (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Tags for search/filter (run this in the SQL editor on existing databases;
+-- safe to re-run: IF NOT EXISTS + a backfill only for NULL rows).
+ALTER TABLE public.posts ADD COLUMN IF NOT EXISTS tags TEXT[] NOT NULL DEFAULT '{}';
+UPDATE public.posts SET tags = '{}' WHERE tags IS NULL;
+
 -- Enable RLS on posts
 ALTER TABLE public.posts ENABLE ROW LEVEL SECURITY;
 
@@ -125,3 +130,60 @@ DROP POLICY IF EXISTS "Users can delete their own comments" ON public.comments;
 CREATE POLICY "Users can delete their own comments" 
   ON public.comments FOR DELETE 
   USING (user_id = (auth.jwt() ->> 'sub'));
+
+-- 5. Bookmarks + follows (run this block in the SQL editor on existing
+-- databases; safe to re-run. The app hides these features until the
+-- tables exist, then lights them up automatically.)
+CREATE TABLE IF NOT EXISTS public.bookmarks (
+  user_id TEXT NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  post_id UUID NOT NULL REFERENCES public.posts(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  PRIMARY KEY (user_id, post_id)
+);
+
+ALTER TABLE public.bookmarks ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Users can view their own bookmarks" ON public.bookmarks;
+CREATE POLICY "Users can view their own bookmarks"
+  ON public.bookmarks FOR SELECT
+  USING (user_id = (auth.jwt() ->> 'sub'));
+
+DROP POLICY IF EXISTS "Users can insert their own bookmarks" ON public.bookmarks;
+CREATE POLICY "Users can insert their own bookmarks"
+  ON public.bookmarks FOR INSERT
+  WITH CHECK (user_id = (auth.jwt() ->> 'sub'));
+
+DROP POLICY IF EXISTS "Users can delete their own bookmarks" ON public.bookmarks;
+CREATE POLICY "Users can delete their own bookmarks"
+  ON public.bookmarks FOR DELETE
+  USING (user_id = (auth.jwt() ->> 'sub'));
+
+CREATE INDEX IF NOT EXISTS bookmarks_user_id_idx ON public.bookmarks (user_id);
+
+CREATE TABLE IF NOT EXISTS public.follows (
+  follower_id TEXT NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  following_id TEXT NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  PRIMARY KEY (follower_id, following_id),
+  CHECK (follower_id <> following_id)
+);
+
+ALTER TABLE public.follows ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Follows are viewable by everyone" ON public.follows;
+CREATE POLICY "Follows are viewable by everyone"
+  ON public.follows FOR SELECT
+  USING (true);
+
+DROP POLICY IF EXISTS "Users can insert their own follows" ON public.follows;
+CREATE POLICY "Users can insert their own follows"
+  ON public.follows FOR INSERT
+  WITH CHECK (follower_id = (auth.jwt() ->> 'sub'));
+
+DROP POLICY IF EXISTS "Users can delete their own follows" ON public.follows;
+CREATE POLICY "Users can delete their own follows"
+  ON public.follows FOR DELETE
+  USING (follower_id = (auth.jwt() ->> 'sub'));
+
+CREATE INDEX IF NOT EXISTS follows_follower_id_idx ON public.follows (follower_id);
+CREATE INDEX IF NOT EXISTS follows_following_id_idx ON public.follows (following_id);

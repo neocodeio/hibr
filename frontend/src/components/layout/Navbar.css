@@ -62,7 +62,8 @@
 }
 
 
-.navbar__theme-toggle {
+.navbar__theme-toggle,
+.navbar__search-toggle {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -75,12 +76,105 @@
   color: var(--color-subtle);
   font-size: var(--font-size-md);
   line-height: 1;
+  flex-shrink: 0;
   transition: color 0.12s ease, background-color 0.12s ease;
 }
 
-.navbar__theme-toggle:hover {
+.navbar__theme-toggle:hover,
+.navbar__search-toggle:hover {
   color: var(--color-ink);
   background-color: var(--color-hover);
+}
+
+.navbar__theme-toggle:focus-visible,
+.navbar__search-toggle:focus-visible {
+  outline: 2px solid var(--color-ink);
+  outline-offset: 2px;
+}
+
+/* ── Expanding search ───────────────────────────────────────── */
+.navbar__search {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.navbar__search-field {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.navbar__search-input {
+  width: 0;
+  min-width: 0;
+  height: 36px;
+  opacity: 0;
+  visibility: hidden;
+  font-family: var(--font-base);
+  font-size: var(--font-size-sm);
+  color: var(--color-ink);
+  background-color: var(--color-surface);
+  border: 1px solid transparent;
+  border-radius: var(--radius-full);
+  padding: 0;
+  outline: none;
+  transition:
+    width 0.22s ease,
+    opacity 0.15s ease,
+    visibility 0.15s ease,
+    padding 0.22s ease,
+    border-color 0.15s ease;
+}
+
+.navbar__search-input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.navbar__search-input::placeholder {
+  color: var(--color-subtle);
+}
+
+.navbar__search--open .navbar__search-input {
+  width: 210px;
+  opacity: 1;
+  visibility: visible;
+  border-color: var(--color-border);
+  padding-inline-start: 12px;
+  padding-inline-end: 32px;
+  margin-inline-start: 2px;
+}
+
+.navbar__search--open .navbar__search-input:focus {
+  border-color: var(--color-ink);
+}
+
+.navbar__search-clear {
+  position: absolute;
+  inset-inline-end: 4px;
+  width: 26px;
+  height: 26px;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-full);
+  color: var(--color-subtle);
+  transition: color 0.12s ease, background-color 0.12s ease;
+}
+
+.navbar__search--open .navbar__search-clear {
+  display: inline-flex;
+}
+
+.navbar__search-clear:hover {
+  color: var(--color-ink);
+  background-color: var(--color-hover);
+}
+
+.navbar__search-clear:focus-visible {
+  outline: 2px solid var(--color-ink);
+  outline-offset: 2px;
 }
 
 /* ── Account dropdown ─────────────────────────────────────── */
@@ -227,10 +321,15 @@
   .navbar__inner {
     height: 52px;
     padding: 0 var(--space-4);
+    gap: var(--space-3);
   }
 
   .navbar__nav {
     display: none;
+  }
+
+  .navbar__search--open .navbar__search-input {
+    width: min(42vw, 200px);
   }
 
   .navbar__menu {
@@ -242,5 +341,9 @@
 @media (prefers-reduced-motion: reduce) {
   .navbar__menu {
     animation: none;
+  }
+
+  .navbar__search-input {
+    transition: none;
   }
 }

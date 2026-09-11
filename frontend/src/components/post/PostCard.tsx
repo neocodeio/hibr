@@ -4,11 +4,13 @@ import {
   FavouriteIcon,
   BubbleChatIcon,
   Share01Icon,
+  Bookmark02Icon,
   MoreHorizontalIcon,
   Delete02Icon,
 } from 'hugeicons-react';
 
 import { useAuth } from '../../lib/AuthContext';
+import { useSocial } from '../../lib/SocialContext';
 import { formatRelativeTime } from '../../lib/date';
 import { getProfilePath, getPostPath, deletePostFromSupabase } from '../../lib/posts';
 import { usePostLike } from '../../lib/usePostLike';
@@ -29,6 +31,8 @@ function getInitial(name: string): string {
 
 function PostCard({ post, onDeleted, stats = null }: PostCardProps) {
   const { isAuthenticated, requireAuth, user, getSupabaseToken } = useAuth();
+  const { bookmarkIds, bookmarksOn, toggleBookmark } = useSocial();
+  const isSaved = bookmarkIds.has(post.id);
   const [isShareOpen, setIsShareOpen] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -92,6 +96,12 @@ function PostCard({ post, onDeleted, stats = null }: PostCardProps) {
     e.preventDefault();
     e.stopPropagation();
     setIsShareOpen(true);
+  };
+
+  const handleBookmark = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    void toggleBookmark(post.id);
   };
 
   const handleMenuToggle = () => {
@@ -196,11 +206,19 @@ function PostCard({ post, onDeleted, stats = null }: PostCardProps) {
         <p className="post-card__excerpt">{post.excerpt}</p>
       </Link>
 
-      {/* Tags */}
+      {/* Tags — tap to filter the feed by tag */}
       {post.tags && post.tags.length > 0 && (
         <div className="post-card__tags">
           {post.tags.slice(0, 3).map((tag) => (
-            <span key={tag} className="post-card__tag">{tag}</span>
+            <Link
+              key={tag}
+              to={`/?tag=${encodeURIComponent(tag)}`}
+              className="post-card__tag"
+              onClick={(e) => e.stopPropagation()}
+              aria-label={`مقالات بوسم ${tag}`}
+            >
+              {tag}
+            </Link>
           ))}
         </div>
       )}
@@ -241,6 +259,23 @@ function PostCard({ post, onDeleted, stats = null }: PostCardProps) {
           >
             <Share01Icon size={18} strokeWidth={1.5} />
           </button>
+
+          {bookmarksOn && (
+            <button
+              type="button"
+              className={`post-card__action${isSaved ? ' post-card__action--saved' : ''}`}
+              onClick={handleBookmark}
+              aria-pressed={isSaved}
+              aria-label={isSaved ? 'محفوظ' : 'احفظ المقال'}
+              title={isSaved ? 'محفوظ' : 'احفظ المقال'}
+            >
+              <Bookmark02Icon
+                size={18}
+                strokeWidth={1.5}
+                fill={isSaved ? 'currentColor' : 'none'}
+              />
+            </button>
+          )}
         </div>
       </div>
 

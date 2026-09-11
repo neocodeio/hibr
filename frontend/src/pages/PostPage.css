@@ -375,6 +375,18 @@ a.post-page__author:focus-visible {
 [data-theme='dark'] .post-page__action--liked:hover {
   color: #fda4af;
   background-color: rgba(251, 113, 133, 0.12);
+  border-color: rgba(251, 113, 133, 0.3);
+}
+
+/* Saved state — filled ink bookmark */
+.post-page__action--saved {
+  color: var(--color-ink);
+}
+
+.post-page__action--saved:hover {
+  color: var(--color-ink);
+  background-color: var(--color-surface);
+  border-color: var(--color-border);
 }
 
 .post-page__divider {

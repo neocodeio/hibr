@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { Cancel01Icon } from 'hugeicons-react';
 import { useAuth } from '../../lib/AuthContext';
-import { createPostInSupabase } from '../../lib/posts';
+import { createPostInSupabase, parseTagsInput } from '../../lib/posts';
 import type { Post } from '../../types';
 import Button from '../ui/Button';
 import './CreatePostModal.css';
@@ -19,6 +19,7 @@ function CreatePostModal({ isOpen, onClose, onPostCreated }: CreatePostModalProp
   const [title, setTitle] = useState('');
   const [excerpt, setExcerpt] = useState('');
   const [content, setContent] = useState('');
+  const [tagsInput, setTagsInput] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
@@ -66,7 +67,7 @@ function CreatePostModal({ isOpen, onClose, onPostCreated }: CreatePostModalProp
 
       const token = await getSupabaseToken();
       const newPost = await createPostInSupabase(
-        { title, excerpt, content },
+        { title, excerpt, content, tags: parseTagsInput(tagsInput) },
         token,
         {
           id: user!.id,
@@ -84,6 +85,7 @@ function CreatePostModal({ isOpen, onClose, onPostCreated }: CreatePostModalProp
       setTitle('');
       setExcerpt('');
       setContent('');
+      setTagsInput('');
       setIsSubmitting(false);
       onClose();
     } catch (err: unknown) {
@@ -161,6 +163,22 @@ function CreatePostModal({ isOpen, onClose, onPostCreated }: CreatePostModalProp
               placeholder="اكتب نبذة تشوّق القارئ للمقال..."
               value={excerpt}
               onChange={(e) => setExcerpt(e.target.value)}
+            />
+          </div>
+
+          <div className="create-post-modal__field">
+            <label htmlFor="post-tags" className="create-post-modal__label">
+              الوسوم <span className="create-post-modal__optional">(اختياري — افصل بينها بفاصلة)</span>
+            </label>
+            <input
+              id="post-tags"
+              type="text"
+              className="create-post-modal__input"
+              placeholder="مثال: تقنية، كتب، خواطر..."
+              value={tagsInput}
+              onChange={(e) => setTagsInput(e.target.value)}
+              maxLength={180}
+              autoComplete="off"
             />
           </div>
 

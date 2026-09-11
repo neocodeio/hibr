@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useClerk } from '@clerk/clerk-react';
 import Logo from '../ui/Logo';
 import Button from '../ui/Button';
@@ -7,8 +7,11 @@ import {
   Moon02Icon,
   Sun01Icon,
   UserIcon,
+  Bookmark02Icon,
   Settings01Icon,
   Logout01Icon,
+  Search01Icon,
+  Cancel01Icon,
 } from 'hugeicons-react';
 import { useTheme } from '../../lib/ThemeProvider';
 import { useAuth } from '../../lib/AuthContext';
@@ -25,9 +28,62 @@ function Navbar() {
   } = useAuth();
   const { openUserProfile } = useClerk();
   const navigate = useNavigate();
+  const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  // Expanding navbar search. The query lives in the URL (?q=) so the feed
+  // filters from anywhere: live while on the feed, on submit otherwise.
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [draft, setDraft] = useState('');
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const onFeed = location.pathname === '/';
+  const urlQuery = searchParams.get('q') ?? '';
+  const searchValue = onFeed ? urlQuery : draft;
+
+  const writeQueryParam = (value: string) => {
+    const next = new URLSearchParams(searchParams);
+    if (value.trim()) next.set('q', value.trim());
+    else next.delete('q');
+    setSearchParams(next, { replace: true });
+  };
+
+  const openSearch = () => {
+    if (!onFeed) setDraft(urlQuery);
+    setSearchOpen(true);
+  };
+
+  const closeSearch = () => {
+    setSearchOpen(false);
+    if (!onFeed) setDraft('');
+  };
+
+  useEffect(() => {
+    if (searchOpen) searchInputRef.current?.focus();
+  }, [searchOpen]);
+
+  const handleSearchChange = (value: string) => {
+    if (onFeed) writeQueryParam(value);
+    else setDraft(value);
+  };
+
+  const handleSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (onFeed) {
+      searchInputRef.current?.blur();
+      return;
+    }
+    if (!draft.trim()) return;
+    navigate(`/?q=${encodeURIComponent(draft.trim())}`);
+  };
+
+  const clearSearch = () => {
+    if (onFeed) writeQueryParam('');
+    else setDraft('');
+    searchInputRef.current?.focus();
+  };
 
   // Close the account menu on outside click or Escape.
   useEffect(() => {
@@ -65,9 +121,55 @@ function Navbar() {
 
         <nav className="navbar__nav" aria-label="التنقل الرئيسي">
           <Link to="/" className="navbar__link">المقالات</Link>
+          {/* {isAuthenticated && (
+            <Link to="/saved" className="navbar__link">المحفوظ</Link> KEEP IT LIKE THIS!
+          )} */}
         </nav>
 
         <div className="navbar__actions">
+          <div className={`navbar__search${searchOpen ? ' navbar__search--open' : ''}`} role="search">
+            <button
+              type="button"
+              className="navbar__search-toggle"
+              onClick={() => (searchOpen ? closeSearch() : openSearch())}
+              aria-expanded={searchOpen}
+              aria-label="بحث"
+            >
+              <Search01Icon size={18} strokeWidth={1.75} />
+            </button>
+            <form className="navbar__search-field" onSubmit={handleSearchSubmit}>
+              <label htmlFor="navbar-search" className="sr-only">
+                دوّر بالمقالات
+              </label>
+              <input
+                ref={searchInputRef}
+                id="navbar-search"
+                type="search"
+                className="navbar__search-input"
+                placeholder="دوّر على مقال..."
+                value={searchValue}
+                onChange={(e) => handleSearchChange(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') closeSearch();
+                }}
+                tabIndex={searchOpen ? 0 : -1}
+                aria-hidden={!searchOpen}
+                autoComplete="off"
+              />
+              {searchOpen && searchValue && (
+                <button
+                  type="button"
+                  className="navbar__search-clear"
+                  onClick={clearSearch}
+                  aria-label="امسح البحث"
+                  tabIndex={searchOpen ? 0 : -1}
+                >
+                  <Cancel01Icon size={14} strokeWidth={2} />
+                </button>
+              )}
+            </form>
+          </div>
+
           <button
             type="button"
             className="navbar__theme-toggle"
@@ -126,6 +228,15 @@ function Navbar() {
                     >
                       <UserIcon size={18} strokeWidth={1.5} />
                       <span>صفحتي</span>
+                    </Link>
+                    <Link
+                      to="/saved"
+                      className="navbar__menu-item"
+                      role="menuitem"
+                      onClick={() => setIsMenuOpen(false)}
+                    >
+                      <Bookmark02Icon size={18} strokeWidth={1.5} />
+                      <span>المحفوظ</span>
                     </Link>
                     <button
                       type="button"

@@ -138,6 +138,21 @@
   font-variant-numeric: tabular-nums;
 }
 
+.profile-page__follow {
+  margin-top: var(--space-2);
+}
+
+.profile-page__follow-inner {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.profile-page__follow-inner svg {
+  display: block;
+  flex-shrink: 0;
+}
+
 /* ── Posts section ─────────────────────────────────────────── */
 .profile-page__section-title {
   font-size: var(--font-size-sm);
