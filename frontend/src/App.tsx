@@ -7,6 +7,7 @@ import Navbar from './components/layout/Navbar';
 import AuthModal from './components/ui/AuthModal';
 import CreatePostModal from './components/post/CreatePostModal';
 import FeedPage from './pages/FeedPage';
+import { Analytics } from "@vercel/analytics/next"
 import PostPage from './pages/PostPage';
 import ProfilePage from './pages/ProfilePage';
 import SavedPage from './pages/SavedPage';
@@ -60,6 +61,7 @@ function App() {
         <AuthProvider>
           <AppShell>
             <Navbar />
+            <Analytics />
             <Routes>
               <Route path="/" element={<FeedPage />} />
               <Route path="/post/:slug" element={<PostPage />} />
