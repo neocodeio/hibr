@@ -183,36 +183,54 @@ export function subscribePostsRealtime(
       ? `post_id=eq.${postIds[0]}`
       : `post_id=in.(${postIds.join(',')})`;
 
-  const channel = supabase
-    .channel('posts-realtime')
-    .on(
-      'postgres_changes',
-      { event: 'INSERT', schema: 'public', table: 'likes', filter },
-      debounced
-    )
-    .on(
-      'postgres_changes',
-      { event: 'DELETE', schema: 'public', table: 'likes', filter },
-      debounced
-    )
-    .on(
-      'postgres_changes',
-      { event: 'INSERT', schema: 'public', table: 'comments', filter },
-      debounced
-    )
-    .on(
-      'postgres_changes',
-      { event: 'DELETE', schema: 'public', table: 'comments', filter },
-      debounced
-    )
-    .subscribe((status) => {
-      if (status !== 'SUBSCRIBED') {
-        console.warn('Realtime posts subscription status:', status);
-      }
-    });
+  // Unique topic per subscription. supabase-js reuses channel objects by
+  // topic, and calling .on() on an already-subscribed channel throws
+  // ("cannot add postgres_changes callbacks ... after subscribe()").
+  // The feed cache (PostsProvider) and the post page subscribe
+  // concurrently, so a shared topic crashed the whole app (blank white
+  // page) as soon as a real post loaded. Unique topics make that
+  // impossible. Realtime is enhancement-only, so any failure here must
+  // degrade to a no-op — never throw into a React effect.
+  const topic = `posts-realtime-${Date.now().toString(36)}-${Math.random()
+    .toString(36)
+    .slice(2, 8)}`;
 
-  return () => {
+  try {
+    const channel = supabase
+      .channel(topic)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'likes', filter },
+        debounced
+      )
+      .on(
+        'postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'likes', filter },
+        debounced
+      )
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'comments', filter },
+        debounced
+      )
+      .on(
+        'postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'comments', filter },
+        debounced
+      )
+      .subscribe((status) => {
+        if (status !== 'SUBSCRIBED') {
+          console.warn('Realtime posts subscription status:', status);
+        }
+      });
+
+    return () => {
+      if (timer) clearTimeout(timer);
+      void supabase.removeChannel(channel);
+    };
+  } catch (err) {
+    console.warn('Realtime posts subscription failed:', err);
     if (timer) clearTimeout(timer);
-    void supabase.removeChannel(channel);
-  };
+    return () => {};
+  }
 }

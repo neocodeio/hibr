@@ -1,11 +1,5 @@
-import { useState, useEffect } from 'react';
-import type { Post } from '../types';
-import { fetchAllPosts } from '../lib/posts';
-import { fetchPostsStats, subscribePostsRealtime } from '../lib/interactions';
-import type { PostsStats } from '../lib/interactions';
-import { useAuth } from '../lib/AuthContext';
 import PostCard from '../components/post/PostCard';
-import CreatePostModal from '../components/post/CreatePostModal';
+import { usePosts } from '../lib/PostsContext';
 import './FeedPage.css';
 
 // const TABS = [
@@ -15,51 +9,11 @@ import './FeedPage.css';
 // ];
 
 function FeedPage() {
-  const { isCreatePostOpen, closeCreatePostModal, isAuthenticated, user } = useAuth();
-  // const [activeTab, setActiveTab] = useState('all');
-  const [posts, setPosts] = useState<Post[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [stats, setStats] = useState<PostsStats | null>(null);
+  // Posts are cached app-wide (PostsProvider loads once). Returning to the
+  // feed never refetches — it renders the cached list instantly.
+  const { posts, stats, isLoading, hasLoaded, removePost } = usePosts();
 
-  useEffect(() => {
-    async function loadPosts() {
-      setIsLoading(true);
-      const data = await fetchAllPosts();
-      setPosts(data);
-      setIsLoading(false);
-    }
-    loadPosts();
-  }, []);
-
-  // Live like states + counts for all visible posts (single batch query),
-  // kept fresh by a realtime subscription (no refresh needed).
-  // NOTE: no stats reset when the list empties — nothing renders then, and
-  // the next non-empty list always triggers a fresh fetch below.
-  useEffect(() => {
-    if (posts.length === 0) return;
-    let cancelled = false;
-    const ids = posts.map((post) => post.id);
-    const uid = isAuthenticated && user ? user.id : null;
-    const refresh = () => {
-      fetchPostsStats(ids, uid).then((s) => {
-        if (!cancelled) setStats(s);
-      });
-    };
-    refresh();
-    const unsubscribe = subscribePostsRealtime(ids, refresh);
-    return () => {
-      cancelled = true;
-      unsubscribe();
-    };
-  }, [posts, isAuthenticated, user]);
-
-  const handlePostCreated = (newPost: Post) => {
-    setPosts((prev) => [newPost, ...prev]);
-  };
-
-  const handlePostDeleted = (postId: string) => {
-    setPosts((prev) => prev.filter((post) => post.id !== postId));
-  };
+  const showInitialLoading = isLoading && !hasLoaded;
 
   return (
     <main className="feed" id="main-content">
@@ -86,28 +40,25 @@ function FeedPage() {
         {/* Post list */}
         <section className="feed__list" aria-label="قائمة المقالات">
           <h1 className="sr-only">المقالات</h1>
-          {isLoading ? (
+          {showInitialLoading ? (
             <div className="feed__loading" style={{ padding: '2rem 0', textAlign: 'center', color: 'var(--color-muted)' }}>
               جاري تحميل المقالات...
+            </div>
+          ) : posts.length === 0 ? (
+            <div className="feed__loading" style={{ padding: '2rem 0', textAlign: 'center', color: 'var(--color-muted)' }}>
+              لا توجد مقالات بعد.
             </div>
           ) : (
             posts.map((post) => (
               <PostCard
                 key={post.id}
                 post={post}
-                onDeleted={handlePostDeleted}
+                onDeleted={removePost}
                 stats={stats}
               />
             ))
           )}
         </section>
-
-        {/* Post Creation Modal */}
-        <CreatePostModal
-          isOpen={isCreatePostOpen}
-          onClose={closeCreatePostModal}
-          onPostCreated={handlePostCreated}
-        />
       </div>
     </main>
   );
