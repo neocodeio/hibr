@@ -1,6 +1,8 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import helmet from 'helmet';
+import { rateLimit } from 'express-rate-limit';
 import { createClient } from '@supabase/supabase-js';
 import { Webhook } from 'svix';
 
@@ -8,6 +10,8 @@ dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+const NODE_ENV = process.env.NODE_ENV || 'development';
+const isProd = NODE_ENV === 'production';
 
 // Initialize Supabase Admin Client (Service Role Key or Anon Key)
 const supabaseUrl = process.env.SUPABASE_URL || 'https://wmfftwbgjgrafustxwxd.supabase.co';
@@ -40,7 +44,138 @@ if (!supabaseKey) {
 
 const supabaseAdmin = createClient(supabaseUrl, supabaseKey);
 
-app.use(cors({ origin: '*' }));
+// ── Security headers ────────────────────────────────────────────
+// crossOriginResourcePolicy must stay 'cross-origin': the frontend calls
+// this API cross-origin, and the default 'same-origin' would make browsers
+// refuse those responses.
+app.use(
+  helmet({
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+  })
+);
+
+// ── CORS: explicit allowlist, never '*' ─────────────────────────
+// Set CORS_ORIGINS in production, e.g.
+//   CORS_ORIGINS=https://hibr.space,https://www.hibr.space
+// Localhost is only ever allowed outside production (local dev).
+const allowedOrigins = (process.env.CORS_ORIGINS || '')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+if (isProd && allowedOrigins.length === 0) {
+  console.warn(
+    '⚠️ CORS_ORIGINS is not set in production — browser clients will be rejected. ' +
+      'Set CORS_ORIGINS to your frontend origin(s).'
+  );
+}
+
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      // Non-browser clients (curl, mobile, server-to-server) send no Origin.
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.includes(origin)) return callback(null, true);
+      if (!isProd && /^http:\/\/localhost:\d+$/.test(origin)) {
+        return callback(null, true);
+      }
+      return callback(new Error('CORS origin not allowed'));
+    },
+    methods: ['GET', 'POST', 'DELETE', 'OPTIONS'],
+  })
+);
+
+// ── Rate limiting ───────────────────────────────────────────────
+// NOTE: no `trust proxy` is set — enable it (e.g. app.set('trust proxy', 1))
+// only if this API actually runs behind a reverse proxy, otherwise client
+// IPs could be spoofed.
+function tooManyRequests(_req: express.Request, res: express.Response) {
+  res.status(429).json({ error: 'Too many requests, please slow down.' });
+}
+
+const globalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 500,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: tooManyRequests,
+});
+
+// Mutations go through the privileged service-role client — limit harder.
+const writeLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 100,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: tooManyRequests,
+});
+
+// Clerk delivers a handful of webhooks with backoff retries — lenient cap
+// so legitimate deliveries are never dropped, abusive ones still are.
+const webhookLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: tooManyRequests,
+});
+
+app.use(globalLimiter);
+
+// ── Validation helpers ──────────────────────────────────────────
+// The service-role client bypasses RLS, so every write path validates
+// types, shapes and lengths before touching the database.
+const MAX_TITLE_LENGTH = 200;
+const MAX_EXCERPT_LENGTH = 500;
+const MAX_CONTENT_LENGTH = 300000;
+const MAX_NAME_LENGTH = 120;
+const MAX_ID_LENGTH = 128;
+const MAX_SLUG_LENGTH = 120;
+
+// Letters/numbers (any script, incl. Arabic), underscore, hyphen.
+const SLUG_RE = /^[\p{L}\p{N}_-]{1,120}$/u;
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function isNonEmptyString(value: unknown, maxLength: number): value is string {
+  return (
+    typeof value === 'string' && value.trim().length > 0 && value.length <= maxLength
+  );
+}
+
+function isOptionalString(value: unknown, maxLength: number): value is string | undefined {
+  return (
+    value === undefined ||
+    (typeof value === 'string' && value.length <= maxLength)
+  );
+}
+
+function isHttpUrl(value: unknown): boolean {
+  if (typeof value !== 'string' || value.length === 0 || value.length > 2048) {
+    return false;
+  }
+  try {
+    const url = new URL(value);
+    return url.protocol === 'http:' || url.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * 500 responses never leak driver internals. In development the real message
+ * is returned for debuggability; in production callers get a generic message
+ * while the details stay in the server logs.
+ */
+function serverError(
+  res: express.Response,
+  err: unknown,
+  publicMessage: string
+) {
+  console.error('❌ Backend error:', err);
+  const detail =
+    !isProd && err instanceof Error && err.message ? `: ${err.message}` : '';
+  return res.status(500).json({ error: `${publicMessage}${detail}` });
+}
 
 /**
  * Wraps async route handlers so rejections are forwarded to Express's error
@@ -53,13 +188,13 @@ const asyncHandler =
     fn(req, res).catch((err) => {
       console.error('❌ Unhandled route error:', err);
       if (!res.headersSent) {
-        res.status(500).json({ error: 'Internal server error' });
+        serverError(res, err, 'Internal server error');
       }
     });
   };
 
 // Webhook endpoint requires raw body for Svix signature verification
-app.post('/api/webhooks/clerk', express.raw({ type: 'application/json' }), asyncHandler(async (req, res) => {
+app.post('/api/webhooks/clerk', webhookLimiter, express.raw({ type: 'application/json', limit: '1mb' }), asyncHandler(async (req, res) => {
   const webhookSecret = process.env.CLERK_WEBHOOK_SECRET;
 
   if (!webhookSecret) {
@@ -78,47 +213,59 @@ app.post('/api/webhooks/clerk', express.raw({ type: 'application/json' }), async
 
   const payload = req.body.toString();
   const wh = new Webhook(webhookSecret);
-  let evt: any;
+  let evt: { type?: string; data?: Record<string, any> };
 
   try {
     evt = wh.verify(payload, {
       'svix-id': svixId,
       'svix-timestamp': svixTimestamp,
       'svix-signature': svixSignature,
-    });
-  } catch (err: any) {
-    console.error('❌ Error verifying Clerk webhook signature:', err.message);
+    }) as { type?: string; data?: Record<string, any> };
+  } catch (err: unknown) {
+    console.error('❌ Error verifying Clerk webhook signature:', err instanceof Error ? err.message : err);
     return res.status(400).json({ error: 'Invalid webhook signature' });
   }
 
   const { type, data } = evt;
+  if (typeof type !== 'string' || typeof data !== 'object' || data === null) {
+    return res.status(400).json({ error: 'Malformed webhook payload' });
+  }
   console.log(`Received Clerk Webhook: ${type}`);
 
   if (type === 'user.created' || type === 'user.updated') {
     const userId = data.id;
-    const email = data.email_addresses?.[0]?.email_address || '';
-    const name = `${data.first_name || ''} ${data.last_name || ''}`.trim() || data.username || email.split('@')[0];
-    const avatarUrl = data.image_url || '';
+    if (typeof userId !== 'string' || userId.length === 0 || userId.length > MAX_ID_LENGTH) {
+      return res.status(400).json({ error: 'Malformed webhook payload' });
+    }
+    const emailAddresses = Array.isArray(data.email_addresses) ? data.email_addresses : [];
+    const email = typeof emailAddresses[0]?.email_address === 'string' ? emailAddresses[0].email_address : '';
+    const firstName = typeof data.first_name === 'string' ? data.first_name : '';
+    const lastName = typeof data.last_name === 'string' ? data.last_name : '';
+    const username = typeof data.username === 'string' ? data.username : '';
+    const name = `${firstName} ${lastName}`.trim() || username || email.split('@')[0] || 'كاتب حِبر';
+    const avatarUrl = typeof data.image_url === 'string' ? data.image_url : '';
 
     const { error } = await supabaseAdmin.from('users').upsert(
       {
         id: userId,
-        email,
-        name,
-        avatar_url: avatarUrl,
+        email: email.slice(0, 320),
+        name: name.slice(0, MAX_NAME_LENGTH),
+        avatar_url: isHttpUrl(avatarUrl) ? avatarUrl : '',
         updated_at: new Date().toISOString(),
       },
       { onConflict: 'id' }
     );
 
     if (error) {
-      console.error('❌ Error syncing user to Supabase:', error);
-      return res.status(500).json({ error: 'Database sync failed' });
+      return serverError(res, error, 'Database sync failed');
     }
 
     console.log(`✅ User ${userId} successfully synced to Supabase!`);
   } else if (type === 'user.deleted') {
     const userId = data.id;
+    if (typeof userId !== 'string' || userId.length === 0 || userId.length > MAX_ID_LENGTH) {
+      return res.status(400).json({ error: 'Malformed webhook payload' });
+    }
     const { error } = await supabaseAdmin.from('users').delete().eq('id', userId);
     if (error) {
       console.error('❌ Error deleting user from Supabase:', error);
@@ -129,7 +276,7 @@ app.post('/api/webhooks/clerk', express.raw({ type: 'application/json' }), async
 }));
 
 // JSON body parser for normal API endpoints (after the raw-body webhook route)
-app.use(express.json());
+app.use(express.json({ limit: '1mb' }));
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -137,27 +284,35 @@ app.get('/api/health', (req, res) => {
 });
 
 // Manual profile sync endpoint
-app.post('/api/users/sync', asyncHandler(async (req, res) => {
-  const { id, email, name, avatarUrl } = req.body;
+app.post('/api/users/sync', writeLimiter, asyncHandler(async (req, res) => {
+  const { id, email, name, avatarUrl } = req.body ?? {};
 
-  if (!id || !email) {
+  if (typeof id !== 'string' || id.length === 0 || id.length > MAX_ID_LENGTH) {
     return res.status(400).json({ error: 'Missing required user fields (id, email)' });
+  }
+  if (typeof email !== 'string' || !EMAIL_RE.test(email) || email.length > 320) {
+    return res.status(400).json({ error: 'Missing required user fields (id, email)' });
+  }
+  if (name !== undefined && (typeof name !== 'string' || name.length > MAX_NAME_LENGTH)) {
+    return res.status(400).json({ error: 'Invalid user fields' });
+  }
+  if (avatarUrl !== undefined && avatarUrl !== '' && !isHttpUrl(avatarUrl)) {
+    return res.status(400).json({ error: 'Invalid user fields' });
   }
 
   const { data, error } = await supabaseAdmin.from('users').upsert(
     {
       id,
       email,
-      name,
-      avatar_url: avatarUrl,
+      name: (typeof name === 'string' && name.trim()) || 'كاتب حِبر',
+      avatar_url: typeof avatarUrl === 'string' && isHttpUrl(avatarUrl) ? avatarUrl : '',
       updated_at: new Date().toISOString(),
     },
     { onConflict: 'id' }
   ).select().single();
 
   if (error) {
-    console.error('Error syncing user:', error);
-    return res.status(500).json({ error: error.message });
+    return serverError(res, error, 'Could not sync user profile');
   }
 
   res.json({ success: true, user: data });
@@ -172,19 +327,33 @@ app.get('/api/posts', asyncHandler(async (req, res) => {
     .order('created_at', { ascending: false });
 
   if (error) {
-    console.error('Error fetching posts:', error);
-    return res.status(500).json({ error: error.message });
+    return serverError(res, error, 'Could not fetch posts');
   }
 
   res.json({ posts: data });
 }));
 
 // Create a new post endpoint
-app.post('/api/posts', asyncHandler(async (req, res) => {
-  const { authorId, title, slug, excerpt, content, readTime, authorName } = req.body;
+app.post('/api/posts', writeLimiter, asyncHandler(async (req, res) => {
+  const { authorId, title, slug, excerpt, content, readTime, authorName } = req.body ?? {};
 
-  if (!authorId || !title || !content) {
+  if (!isNonEmptyString(authorId, MAX_ID_LENGTH) || !isNonEmptyString(title, MAX_TITLE_LENGTH) || !isNonEmptyString(content, MAX_CONTENT_LENGTH)) {
     return res.status(400).json({ error: 'Missing required post fields' });
+  }
+  if (!isOptionalString(excerpt, MAX_EXCERPT_LENGTH) || !isOptionalString(authorName, MAX_NAME_LENGTH)) {
+    return res.status(400).json({ error: 'Invalid post fields' });
+  }
+  if (slug !== undefined && (typeof slug !== 'string' || !SLUG_RE.test(slug))) {
+    return res.status(400).json({ error: 'Invalid post fields' });
+  }
+  const readTimeMinutes =
+    readTime === undefined
+      ? 5
+      : typeof readTime === 'number' && Number.isInteger(readTime) && readTime >= 1 && readTime <= 180
+        ? readTime
+        : NaN;
+  if (Number.isNaN(readTimeMinutes)) {
+    return res.status(400).json({ error: 'Invalid post fields' });
   }
 
   // Guarantee author exists in public.users table
@@ -199,7 +368,7 @@ app.post('/api/posts', asyncHandler(async (req, res) => {
       {
         id: authorId,
         email: `${authorId}@user.hibr`,
-        name: authorName || 'كاتب حِبر',
+        name: (typeof authorName === 'string' && authorName.trim()) || 'كاتب حِبر',
         updated_at: new Date().toISOString(),
       },
       { onConflict: 'id' }
@@ -216,7 +385,7 @@ app.post('/api/posts', asyncHandler(async (req, res) => {
         slug: slug || `${Date.now()}`,
         excerpt: excerpt || content.slice(0, 160) + '...',
         content: content.trim(),
-        read_time: readTime || 5,
+        read_time: readTimeMinutes,
         likes_count: 0,
         comments_count: 0,
         is_published: true,
@@ -228,16 +397,15 @@ app.post('/api/posts', asyncHandler(async (req, res) => {
     .single();
 
   if (error) {
-    console.error('Error creating post in Supabase:', error);
-    return res.status(500).json({ error: error.message });
+    return serverError(res, error, 'Could not create post');
   }
 
   console.log(`✅ Post "${title}" created successfully in Supabase!`);
   res.json({ success: true, post: data });
 }));
 
-// Delete a post endpoint (ownership verified against the stored author)
-app.delete('/api/posts/:id', asyncHandler(async (req, res) => {
+// Delete a post endpoint (ownership always verified against the stored author)
+app.delete('/api/posts/:id', writeLimiter, asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { authorId } = req.body || {};
 
@@ -255,20 +423,28 @@ app.delete('/api/posts/:id', asyncHandler(async (req, res) => {
     return res.status(404).json({ error: 'Post not found' });
   }
 
-  if (authorId && existing.author_id !== authorId) {
+  // authorId is mandatory — without it nobody (not even the author) deletes.
+  if (typeof authorId !== 'string' || authorId.length === 0 || existing.author_id !== authorId) {
     return res.status(403).json({ error: 'Not the post author' });
   }
 
   const { error } = await supabaseAdmin.from('posts').delete().eq('id', id);
 
   if (error) {
-    console.error('Error deleting post in Supabase:', error);
-    return res.status(500).json({ error: error.message });
+    return serverError(res, error, 'Could not delete post');
   }
 
   console.log(`🗑️ Post "${id}" deleted successfully from Supabase!`);
   res.json({ success: true });
 }));
+
+// CORS rejections (and any other routed error) always answer JSON, never HTML.
+app.use((err: unknown, _req: express.Request, res: express.Response, next: express.NextFunction) => {
+  if (err instanceof Error && err.message === 'CORS origin not allowed') {
+    return res.status(403).json({ error: 'Origin not allowed' });
+  }
+  return next(err);
+});
 
 app.listen(PORT, () => {
   console.log(`🚀 Hibr Backend Server running on http://localhost:${PORT}`);
