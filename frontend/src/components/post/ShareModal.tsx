@@ -132,7 +132,7 @@ function ShareModal({ post, onClose }: ShareModalProps) {
       >
         <div className="share-modal__header">
           <h2 id="share-modal-title" className="share-modal__heading">
-            مشاركة المقال
+            شارك المقال
           </h2>
           <button
             type="button"
@@ -166,7 +166,7 @@ function ShareModal({ post, onClose }: ShareModalProps) {
             ) : (
               <Copy01Icon size={16} strokeWidth={1.75} />
             )}
-            <span>{copied ? 'تم النسخ' : 'نسخ الرابط'}</span>
+            <span>{copied ? 'اننسخ' : 'انسخ الرابط'}</span>
           </button>
         </div>
 

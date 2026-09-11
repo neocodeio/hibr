@@ -72,7 +72,7 @@ function Navbar() {
             type="button"
             className="navbar__theme-toggle"
             onClick={toggleTheme}
-            aria-label={theme === 'light' ? 'تفعيل الوضع الليلي' : 'تفعيل الوضع النهاري'}
+              aria-label={theme === 'light' ? 'شغّل الوضع الليلي' : 'شغّل الوضع النهاري'}
           >
             {theme === 'light' ? <Moon02Icon size={18} strokeWidth={1.5} /> : <Sun01Icon size={18} strokeWidth={1.5} />}
           </button>
@@ -125,7 +125,7 @@ function Navbar() {
                       onClick={() => setIsMenuOpen(false)}
                     >
                       <UserIcon size={18} strokeWidth={1.5} />
-                      <span>بروفايلي</span>
+                      <span>صفحتي</span>
                     </Link>
                     <button
                       type="button"
@@ -150,7 +150,7 @@ function Navbar() {
                       }}
                     >
                       <Settings01Icon size={18} strokeWidth={1.5} />
-                      <span>إدارة الحساب</span>
+                      <span>إعدادات الحساب</span>
                     </button>
                     <button
                       type="button"

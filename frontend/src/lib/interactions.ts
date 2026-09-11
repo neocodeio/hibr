@@ -99,7 +99,7 @@ export async function toggleLike(
   currentlyLiked: boolean
 ): Promise<boolean> {
   if (!clerkToken) {
-    throw new Error('يجب تسجيل الدخول للإعجاب بالمقال.');
+    throw new Error('لازم تسجّل دخولك عشان تحط إعجاب.');
   }
 
   const client = getSupabaseClient(clerkToken);
@@ -140,8 +140,8 @@ export async function addComment(
   clerkToken: string | null
 ): Promise<PostComment> {
   const text = content.trim();
-  if (!text) throw new Error('يرجى كتابة تعليق أولاً.');
-  if (!clerkToken) throw new Error('يجب تسجيل الدخول للتعليق.');
+  if (!text) throw new Error('اكتب تعليقك أول.');
+  if (!clerkToken) throw new Error('لازم تسجّل دخولك عشان تعلّق.');
 
   const client = getSupabaseClient(clerkToken);
   const { data, error } = await client
@@ -151,7 +151,7 @@ export async function addComment(
     .single();
 
   if (error || !data) {
-    throw new Error(error?.message || 'تعذر نشر التعليق، يرجى المحاولة مرة أخرى.');
+    throw new Error(error?.message || 'ما قدرنا ننشر التعليق، حاول مرة ثانية.');
   }
   return formatCommentRow(data);
 }

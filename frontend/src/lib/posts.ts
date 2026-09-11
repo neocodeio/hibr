@@ -216,7 +216,7 @@ export async function deletePostFromSupabase(
         console.error('Client Supabase delete failed:', error.message);
         errors.push(`Supabase: ${error.message}`);
       } else {
-        errors.push('Supabase: لم يتم حذف أي مقال (تحقق من صلاحيات الحذف RLS).');
+        errors.push('Supabase: ما انحذف أي مقال (تأكد من صلاحيات الحذف RLS).');
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -248,7 +248,7 @@ export async function deletePostFromSupabase(
     errors.push(`Backend: ${message}`);
   }
 
-  throw new Error(`فشل حذف المقال. ${errors.join(' | ')}`);
+  throw new Error(`ما قدرنا نحذف المقال. ${errors.join(' | ')}`);
 }
 
 /**
@@ -388,8 +388,5 @@ export async function createPostInSupabase(
   }
 
   // Both save paths failed — surface the real error instead of faking success.
-  throw new Error(
-    `فشل حفظ المقال في قاعدة البيانات. ${errors.join(' | ')}` ||
-      'فشل حفظ المقال في قاعدة البيانات.'
-  );
+  throw new Error(`ما قدرنا نحفظ المقال في قاعدة البيانات. ${errors.join(' | ')}`);
 }

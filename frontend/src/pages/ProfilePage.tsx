@@ -136,7 +136,7 @@ function ProfilePage() {
     return (
       <main className="profile-page" id="main-content">
         <div className="profile-page__container" role="status" aria-live="polite">
-          <span className="sr-only">جاري تحميل الملف الشخصي...</span>
+          <span className="sr-only">نحمّل الملف الشخصي...</span>
           <div className="profile-page__skeleton" aria-hidden="true">
             <div className="profile-page__skeleton-avatar" />
             <div className="profile-page__skeleton-name" />
@@ -154,11 +154,11 @@ function ProfilePage() {
     return (
       <main className="profile-page" id="main-content">
         <div className="profile-page__not-found">
-          <h1>الحساب غير موجود</h1>
-          <p>لم نتمكن من إيجاد الملف الشخصي الذي تبحث عنه.</p>
+          <h1>الحساب مو موجود</h1>
+          <p>ما لقينا الحساب اللي تدور عليه.</p>
           <Link to="/" className="profile-page__back profile-page__back--centered">
             <ArrowRight01Icon size={16} strokeWidth={2} />
-            <span>العودة إلى المقالات</span>
+            <span>ارجع للمقالات</span>
           </Link>
         </div>
       </main>
@@ -172,7 +172,7 @@ function ProfilePage() {
       <div className="profile-page__container">
         <Link to="/" className="profile-page__back">
           <ArrowRight01Icon size={16} strokeWidth={2} />
-          <span>العودة إلى المقالات</span>
+          <span>ارجع للمقالات</span>
         </Link>
 
         <header className="profile-page__header">
@@ -219,8 +219,8 @@ function ProfilePage() {
             <div className="profile-page__empty">
               <p>
                 {isOwnProfile
-                  ? 'لم تنشر أي مقال بعد. شارك أول أفكارك مع القرّاء.'
-                  : 'لم ينشر هذا الكاتب أي مقال بعد.'}
+                  ? 'توه ما نشرت شي. شاركنا أول أفكارك.'
+                  : 'هذا الكاتب توه ما نشر شي.'}
               </p>
               {isOwnProfile && (
                 <Button variant="primary" size="sm" onClick={openCreatePostModal}>

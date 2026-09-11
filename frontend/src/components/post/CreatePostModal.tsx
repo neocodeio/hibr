@@ -48,11 +48,11 @@ function CreatePostModal({ isOpen, onClose, onPostCreated }: CreatePostModalProp
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) {
-      setErrorMsg('يرجى إدخال عنوان المقال');
+      setErrorMsg('حط عنوان للمقال أول');
       return;
     }
     if (!content.trim()) {
-      setErrorMsg('يرجى إدخال محتوى المقال');
+      setErrorMsg('اكتب محتوى المقال أول');
       return;
     }
 
@@ -61,7 +61,7 @@ function CreatePostModal({ isOpen, onClose, onPostCreated }: CreatePostModalProp
 
     try {
       if (!canPublish) {
-        throw new Error('يجب تسجيل الدخول لنشر المقال.');
+        throw new Error('لازم تسجّل دخولك عشان تنشر المقال.');
       }
 
       const token = await getSupabaseToken();
@@ -91,7 +91,7 @@ function CreatePostModal({ isOpen, onClose, onPostCreated }: CreatePostModalProp
       setErrorMsg(
         err instanceof Error && err.message
           ? err.message
-          : 'حدث خطأ أثناء نشر المقال، يرجى المحاولة مرة أخرى.'
+          : 'صار خطأ ونحن ننشر المقال، حاول مرة ثانية.'
       );
       setIsSubmitting(false);
     }
@@ -115,7 +115,7 @@ function CreatePostModal({ isOpen, onClose, onPostCreated }: CreatePostModalProp
       >
         <div className="create-post-modal__header">
           <h2 id="create-post-title" className="create-post-modal__heading">
-            نشر مقال جديد
+            اكتب مقال جديد
           </h2>
           <button
             type="button"
@@ -152,13 +152,13 @@ function CreatePostModal({ isOpen, onClose, onPostCreated }: CreatePostModalProp
 
           <div className="create-post-modal__field">
             <label htmlFor="post-excerpt" className="create-post-modal__label">
-              مقدمة موجزة <span className="create-post-modal__optional">(اختياري)</span>
+              نبذة سريعة <span className="create-post-modal__optional">(اختياري)</span>
             </label>
             <textarea
               id="post-excerpt"
               rows={2}
               className="create-post-modal__textarea create-post-modal__excerpt-textarea"
-              placeholder="اكتب ملخصاً أو مقدمة جذابة للمقال..."
+              placeholder="اكتب نبذة تشوّق القارئ للمقال..."
               value={excerpt}
               onChange={(e) => setExcerpt(e.target.value)}
             />
@@ -172,7 +172,7 @@ function CreatePostModal({ isOpen, onClose, onPostCreated }: CreatePostModalProp
               id="post-content"
               rows={8}
               className="create-post-modal__textarea create-post-modal__content-textarea"
-              placeholder="اكتب نص المقال كاملاً هنا..."
+              placeholder="اكتب المقال كامل هنا..."
               value={content}
               onChange={(e) => setContent(e.target.value)}
               required
@@ -193,7 +193,7 @@ function CreatePostModal({ isOpen, onClose, onPostCreated }: CreatePostModalProp
               type="submit"
               disabled={isSubmitting}
             >
-              {isSubmitting ? 'جاري النشر...' : 'نشر المقال'}
+              {isSubmitting ? 'ننشر المقال...' : 'نشر المقال'}
             </Button>
           </div>
         </form>

@@ -113,7 +113,7 @@ function PostCard({ post, onDeleted, stats = null }: PostCardProps) {
       setDeleteError(
         err instanceof Error && err.message
           ? err.message
-          : 'حدث خطأ أثناء حذف المقال، يرجى المحاولة مرة أخرى.'
+          : 'صار خطأ ونحن نحذف المقال، حاول مرة ثانية.'
       );
     } finally {
       setIsDeleting(false);
@@ -183,7 +183,7 @@ function PostCard({ post, onDeleted, stats = null }: PostCardProps) {
                 disabled={isDeleting}
               >
                 <Delete02Icon size={18} strokeWidth={1.5} />
-                <span>{isDeleting ? 'جاري الحذف...' : 'حذف المقال'}</span>
+                <span>{isDeleting ? 'نحذف المقال...' : 'حذف المقال'}</span>
               </button>
             </div>
           )}

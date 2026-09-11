@@ -19,7 +19,7 @@ function FeedPage() {
     <main className="feed" id="main-content">
       <div className="feed__wrapper">
         {/* Tab bar */}
-        <div className="feed__bar" role="tablist" aria-label="تصفية المقالات">
+        <div className="feed__bar" role="tablist" aria-label="قائمة المقالات">
           {/* <div className="feed__tabs">
             {TABS.map((tab) => (
               <button
@@ -42,11 +42,11 @@ function FeedPage() {
           <h1 className="sr-only">المقالات</h1>
           {showInitialLoading ? (
             <div className="feed__loading" style={{ padding: '2rem 0', textAlign: 'center', color: 'var(--color-muted)' }}>
-              جاري تحميل المقالات...
+              نحمّل المقالات...
             </div>
           ) : posts.length === 0 ? (
             <div className="feed__loading" style={{ padding: '2rem 0', textAlign: 'center', color: 'var(--color-muted)' }}>
-              لا توجد مقالات بعد.
+              ما فيه مقالات للحين.
             </div>
           ) : (
             posts.map((post) => (

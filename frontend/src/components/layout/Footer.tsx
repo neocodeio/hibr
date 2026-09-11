@@ -24,12 +24,12 @@ function Footer() {
               <Logo />
             </Link>
             <p className="footer__description">
-              مساحة مستقلة للقراءة والكتابة الجادة. نبتكر بيئة هادئة لإثراء الكلمة العربية ونشر الأفكار الرصينة.
+              مساحتك للقراءة والكتابة الزينة. مكان هادي تنشر فيه أفكارك وتثري الكلمة العربية.
             </p>
           </div>
 
           {/* Navigation Columns */}
-          <nav className="footer__nav" aria-label="روابط الترويسة السفلية">
+          <nav className="footer__nav" aria-label="روابط أسفل الصفحة">
             <div className="footer__col">
               <h3 className="footer__col-title">استكشف</h3>
               <ul className="footer__col-links">
@@ -53,7 +53,7 @@ function Footer() {
               <ul className="footer__col-links">
                 <li><a href="#" className="footer__link">الشروط والأحكام</a></li>
                 <li><a href="#" className="footer__link">سياسة الخصوصية</a></li>
-                <li><a href="#" className="footer__link">تواصل معنا</a></li>
+                <li><a href="#" className="footer__link">كلّمنا</a></li>
               </ul>
             </div>
           </nav>
@@ -69,16 +69,16 @@ function Footer() {
           </p>
 
           <p className="footer__tagline">
-            اكتب ما يستحق أن يُقرأ
+            اكتب اللي يستاهل ينقري
           </p>
 
           <button
             type="button"
             className="footer__back-top"
             onClick={scrollToTop}
-            aria-label="العودة إلى أعلى الصفحة"
+            aria-label="ارجع فوق"
           >
-            <span>الأعلى</span>
+            <span>فوق</span>
             <ArrowUp01Icon size={16} strokeWidth={1.75} aria-hidden="true" />
           </button>
         </div>

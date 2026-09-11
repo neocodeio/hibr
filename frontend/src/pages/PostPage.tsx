@@ -38,9 +38,9 @@ function scrollToComments() {
 }
 
 function formatReadTime(minutes: number): string {
-  if (minutes <= 1) return 'دقيقة واحدة';
-  if (minutes === 2) return 'دقيقتان';
-  if (minutes <= 10) return `${minutes} دقائق`;
+  if (minutes <= 1) return 'دقيقة';
+  if (minutes === 2) return 'دقيقتين';
+  if (minutes <= 10) return `${minutes} دقايق`;
   return `${minutes} دقيقة`;
 }
 
@@ -232,7 +232,7 @@ function PostPage() {
     return (
       <main className="post-page" id="main-content">
         <div className="post-page__container" role="status" aria-live="polite">
-          <span className="sr-only">جاري تحميل المقال...</span>
+          <span className="sr-only">نحمّل المقال...</span>
           <div className="post-page__skeleton" aria-hidden="true">
             <div className="post-page__skeleton-pill" />
             <div className="post-page__skeleton-title" />
@@ -256,11 +256,11 @@ function PostPage() {
       <main className="post-page" id="main-content">
         <div className="post-page__not-found">
           <p className="post-page__not-found-kicker">404</p>
-          <h1>المقال غير موجود</h1>
-          <p>لم نتمكن من إيجاد المقال الذي تبحث عنه. ربما تم حذفه أو تغيّر رابطه.</p>
+          <h1>المقال مو موجود</h1>
+          <p>ما لقينا المقال اللي تدور عليه. يمكن انحذف أو تغيّر رابطه.</p>
           <Link to="/" className="post-page__back post-page__back--center">
             <ArrowRight01Icon size={16} strokeWidth={2} />
-            <span>العودة إلى المقالات</span>
+            <span>ارجع للمقالات</span>
           </Link>
         </div>
       </main>
@@ -295,7 +295,7 @@ function PostPage() {
       setCommentError(
         err instanceof Error && err.message
           ? err.message
-          : 'تعذر نشر التعليق، يرجى المحاولة مرة أخرى.'
+          : 'ما قدرنا ننشر التعليق، حاول مرة ثانية.'
       );
     } finally {
       setCommentPosting(false);
@@ -434,7 +434,7 @@ function PostPage() {
                 <Share01Icon size={18} strokeWidth={1.75} />
               </button>
             </div>
-            <p className="post-page__hint">أعجبك المقال؟ شاركه مع من يهمه الموضوع.</p>
+            <p className="post-page__hint">عجبك المقال؟ شاركه مع اللي يستاهل يقراه.</p>
           </footer>
         </article>
 
@@ -476,14 +476,14 @@ function PostPage() {
                     id="comment-text"
                     className="post-page__comment-input"
                     rows={3}
-                    placeholder="شارك رأيك في المقال..."
+                    placeholder="عطنا رأيك بالمقال..."
                     value={commentDraft}
                     onChange={(e) => setCommentDraft(e.target.value)}
                     disabled={commentPosting}
                   />
                   <div className="post-page__comment-actions">
                     <span className="post-page__comment-hint">
-                     كن دايماً محترم في كتابة التعليقات
+                     خلك راقي ومحترم بالنقاش
                     </span>
                     <Button
                       variant="primary"
@@ -491,7 +491,7 @@ function PostPage() {
                       type="submit"
                       disabled={commentPosting || !commentDraft.trim()}
                     >
-                      {commentPosting ? 'جاري النشر...' : 'نشر التعليق'}
+                      {commentPosting ? 'ننشر تعليقك...' : 'نشر التعليق'}
                     </Button>
                   </div>
                 </div>
@@ -499,7 +499,7 @@ function PostPage() {
             </form>
           ) : (
             <div className="post-page__comment-signin">
-              <p>سجّل دخولك للمشاركة في النقاش.</p>
+              <p>سجّل دخولك عشان تشارك بالنقاش.</p>
               <Button variant="ghost" size="sm" onClick={openSignInModal}>
                 سجّل دخولك للتعليق
               </Button>
@@ -510,12 +510,12 @@ function PostPage() {
             {commentsLoading ? (
               <div className="post-page__comment-loading" aria-live="polite">
                 <span className="post-page__spinner" aria-hidden="true" />
-                جاري تحميل التعليقات...
+                نحمّل التعليقات...
               </div>
             ) : comments.length === 0 ? (
               <div className="post-page__empty">
                 <BubbleChatIcon size={22} strokeWidth={1.5} />
-                <p>لا توجد تعليقات بعد.<br />كن أول من يبدأ النقاش.</p>
+                <p>توه ما فيه تعليقات.<br />خلك أول واحد يبدأ النقاش.</p>
               </div>
             ) : (
               comments.map((comment) => (

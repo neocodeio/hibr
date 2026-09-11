@@ -146,7 +146,7 @@ function AuthModal() {
         className="auth-modal"
         role="dialog"
         aria-modal="true"
-        aria-label={authModalMode === 'signin' ? 'تسجيل الدخول' : 'إنشاء حساب'}
+        aria-label={authModalMode === 'signin' ? 'دخول' : 'حساب جديد'}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="auth-modal__topbar">
@@ -161,7 +161,7 @@ function AuthModal() {
         </div>
 
         {/* Tab switcher */}
-        <div className="auth-modal__tabs" role="tablist" aria-label="اختيار وضع الدخول">
+        <div className="auth-modal__tabs" role="tablist" aria-label="اختر دخول أو حساب جديد">
           <button
             type="button"
             role="tab"
@@ -169,7 +169,7 @@ function AuthModal() {
             className={`auth-modal__tab ${authModalMode === 'signin' ? 'auth-modal__tab--active' : ''}`}
             onClick={() => setAuthModalMode('signin')}
           >
-            تسجيل الدخول
+            دخول
           </button>
           <button
             type="button"
@@ -178,7 +178,7 @@ function AuthModal() {
             className={`auth-modal__tab ${authModalMode === 'signup' ? 'auth-modal__tab--active' : ''}`}
             onClick={() => setAuthModalMode('signup')}
           >
-            إنشاء حساب
+            حساب جديد
           </button>
         </div>
 
