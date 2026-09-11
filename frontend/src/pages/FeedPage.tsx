@@ -6,8 +6,6 @@ import { useAuth } from '../lib/AuthContext';
 import { useSocial } from '../lib/SocialContext';
 import './FeedPage.css';
 
-const MAX_TAG_CHIPS = 8;
-
 type FeedTab = 'all' | 'following';
 
 function pluralPosts(count: number): string {
@@ -32,20 +30,6 @@ function FeedPage() {
   const showInitialLoading = isLoading && !hasLoaded;
   const showFollowingTab = isAuthenticated && followsOn;
 
-  // Most used tags across cached posts — instant, no extra queries.
-  const topTags = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const post of posts) {
-      for (const tag of post.tags ?? []) {
-        counts.set(tag, (counts.get(tag) ?? 0) + 1);
-      }
-    }
-    return [...counts.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, MAX_TAG_CHIPS)
-      .map(([tag]) => tag);
-  }, [posts]);
-
   const filtered = useMemo(() => {
     const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
     return posts.filter((post) => {
@@ -59,13 +43,6 @@ function FeedPage() {
   }, [posts, query, activeTag, feedTab, followingIds]);
 
   const isFiltering = query.trim().length > 0 || activeTag.length > 0 || feedTab === 'following';
-
-  const setTag = (tag: string) => {
-    const next = new URLSearchParams(searchParams);
-    if (tag) next.set('tag', tag);
-    else next.delete('tag');
-    setSearchParams(next, { replace: true });
-  };
 
   const clearFilters = () => {
     setSearchParams({}, { replace: true });
@@ -101,23 +78,6 @@ function FeedPage() {
             >
               اللي أتابعهم
             </button>
-          </div>
-        )}
-
-        {/* Tag chips */}
-        {topTags.length > 0 && (
-          <div className="feed__tags" role="group" aria-label="فلترة بالوسوم">
-            {topTags.map((tag) => (
-              <button
-                key={tag}
-                type="button"
-                className={`feed__tag${activeTag === tag ? ' feed__tag--active' : ''}`}
-                onClick={() => setTag(activeTag === tag ? '' : tag)}
-                aria-pressed={activeTag === tag}
-              >
-                #{tag}
-              </button>
-            ))}
           </div>
         )}
 
