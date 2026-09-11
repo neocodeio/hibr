@@ -434,7 +434,7 @@ function PostPage() {
                 <Share01Icon size={18} strokeWidth={1.75} />
               </button>
             </div>
-            <p className="post-page__hint">أعجبك المقال؟ شاركه مع من يهمه الأمر.</p>
+            <p className="post-page__hint">أعجبك المقال؟ شاركه مع من يهمه الموضوع.</p>
           </footer>
         </article>
 
@@ -445,7 +445,7 @@ function PostPage() {
         >
           <div className="post-page__comments-head">
             <h2 className="post-page__comments-title">
-              النقاش
+              التعليقات
               <span className="post-page__comments-count">{commentsCount}</span>
             </h2>
           </div>
@@ -483,7 +483,7 @@ function PostPage() {
                   />
                   <div className="post-page__comment-actions">
                     <span className="post-page__comment-hint">
-                      كن لطيفًا ومحترمًا في النقاش
+                     كن دايماً محترم في كتابة التعليقات
                     </span>
                     <Button
                       variant="primary"

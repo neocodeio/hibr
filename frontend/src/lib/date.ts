@@ -9,10 +9,10 @@ export function formatRelativeTime(isoDate: string | Date): string {
   const diffHours = Math.floor(diffMs / 3_600_000);
   const diffDays = Math.floor(diffMs / 86_400_000);
 
-  if (diffMin < 1) return 'now';
-  if (diffMin < 60) return `${diffMin}min`;
-  if (diffHours < 24) return `${diffHours}h`;
-  if (diffDays < 7) return `${diffDays}d`;
+  if (diffMin < 1) return 'الحين';
+  if (diffMin < 60) return `${diffMin} د`;
+  if (diffHours < 24) return `${diffHours} س`;
+  if (diffDays < 7) return `${diffDays} ي`;
 
   return date.toLocaleDateString('ar-SA', {
     day: 'numeric',

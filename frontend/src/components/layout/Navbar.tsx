@@ -133,7 +133,20 @@ function Navbar() {
                       role="menuitem"
                       onClick={() => {
                         setIsMenuOpen(false);
-                        openUserProfile();
+                        // Clerk renders this modal itself — pass the
+                        // close-button position through its official
+                        // appearance API (mirrored by the
+                        // .cl-modalCloseButton override in index.css).
+                        openUserProfile({
+                          appearance: {
+                            elements: {
+                              modalCloseButton: {
+                                right: 'auto',
+                                left: '16px',
+                              },
+                            },
+                          },
+                        });
                       }}
                     >
                       <Settings01Icon size={18} strokeWidth={1.5} />

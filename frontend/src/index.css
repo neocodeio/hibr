@@ -198,3 +198,20 @@ button {
   white-space: nowrap;
   border-width: 0;
 }
+
+/* ------------------------------------------------------------
+   6. Clerk prebuilt components (profile modal, etc.)
+   Clerk renders its own UI in a portal with stable `cl-*`
+   classes — see "Bring your own CSS" in Clerk's docs.
+   `!important` wins over Clerk's runtime-injected styles
+   regardless of stylesheet order.
+   ------------------------------------------------------------ */
+
+/* Profile modal: close (X) on the physical left, not the right,
+   to match the RTL layout. Physical `left` is used deliberately
+   so it lands exactly where expected in both directions. */
+.cl-modalCloseButton {
+  right: auto !important;
+  inset-inline-end: auto !important;
+  left: 16px !important;
+}

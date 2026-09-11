@@ -338,6 +338,7 @@ a.post-card__author-row:focus-visible {
     opacity: 0;
     transform: translateY(-4px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -469,6 +470,7 @@ a.post-card__author-row:focus-visible {
 
 /* ── Reduced motion ────────────────────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
+
   .post-card,
   .post-card__action,
   .post-card__tag,
