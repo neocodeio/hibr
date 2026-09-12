@@ -31,6 +31,65 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+// OAuth (e.g. Google) leaves the page and comes back, wiping in-memory
+// state. Persisting the modal means the signup "continue" step (username)
+// reopens inside OUR modal on return instead of falling back to Clerk's
+// hosted pages. sessionStorage survives the same-tab round-trip and dies
+// with the tab, so abandoned flows never haunt later visits.
+const AUTH_MODAL_STORAGE_KEY = 'hibr:auth-modal';
+const CREATE_AFTER_AUTH_STORAGE_KEY = 'hibr:create-after-auth';
+
+type PersistedAuthMode = 'signin' | 'signup';
+
+function readPersistedAuthMode(): PersistedAuthMode | null {
+  try {
+    const raw = sessionStorage.getItem(AUTH_MODAL_STORAGE_KEY);
+    return raw === 'signin' || raw === 'signup' ? raw : null;
+  } catch {
+    return null;
+  }
+}
+
+function persistAuthMode(mode: PersistedAuthMode) {
+  try {
+    sessionStorage.setItem(AUTH_MODAL_STORAGE_KEY, mode);
+  } catch {
+    // Storage unavailable — the modal simply won't survive a reload.
+  }
+}
+
+function clearPersistedAuthMode() {
+  try {
+    sessionStorage.removeItem(AUTH_MODAL_STORAGE_KEY);
+  } catch {
+    // noop
+  }
+}
+
+function readCreateAfterAuth(): boolean {
+  try {
+    return sessionStorage.getItem(CREATE_AFTER_AUTH_STORAGE_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function persistCreateAfterAuth() {
+  try {
+    sessionStorage.setItem(CREATE_AFTER_AUTH_STORAGE_KEY, '1');
+  } catch {
+    // noop
+  }
+}
+
+function clearCreateAfterAuth() {
+  try {
+    sessionStorage.removeItem(CREATE_AFTER_AUTH_STORAGE_KEY);
+  } catch {
+    // noop
+  }
+}
+
 interface AuthProviderProps {
   children: ReactNode;
 }
@@ -40,10 +99,20 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const { getToken } = useClerkAuth();
   const { signOut: clerkSignOut } = useClerk();
 
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  // Reopen the modal on boot when an OAuth round-trip is in flight —
+  // the <SignUp>/<SignIn> with routing="virtual" then picks up the pending
+  // flow (e.g. the required-username step) right inside our modal.
+  const [isModalOpen, setIsModalOpen] = useState(() => readPersistedAuthMode() !== null);
   const [isCreatePostOpen, setIsCreatePostOpen] = useState(false);
-  const [authModalMode, setAuthModalMode] = useState<'signin' | 'signup'>('signin');
+  const [authModalMode, setAuthModalModeState] = useState<PersistedAuthMode>(
+    () => readPersistedAuthMode() ?? 'signin'
+  );
   const pendingActionRef = useRef<(() => void) | null>(null);
+
+  const setAuthModalMode = useCallback((mode: 'signin' | 'signup') => {
+    setAuthModalModeState(mode);
+    persistAuthMode(mode);
+  }, []);
 
   const isAuthenticated = Boolean(isSignedIn);
 
@@ -62,14 +131,23 @@ export function AuthProvider({ children }: AuthProviderProps) {
     [clerkUser]
   );
 
-  // Execute pending action after authentication
+  // After authentication: run any pending action (same-session), reopen
+  // the composer when it was requested before an OAuth reload, then always
+  // close the modal and clear the round-trip flags. Storage writes stay
+  // synchronous (external-system sync); the UI transitions are deferred to
+  // a microtask so this effect never triggers cascading renders.
   useEffect(() => {
-    if (isAuthenticated && pendingActionRef.current) {
-      const action = pendingActionRef.current;
-      pendingActionRef.current = null;
-      action();
+    if (!isAuthenticated) return;
+    clearPersistedAuthMode();
+    const pending = pendingActionRef.current;
+    pendingActionRef.current = null;
+    const wantsComposer = readCreateAfterAuth();
+    clearCreateAfterAuth();
+    queueMicrotask(() => {
+      if (pending) pending();
+      else if (wantsComposer) setIsCreatePostOpen(true);
       setIsModalOpen(false);
-    }
+    });
   }, [isAuthenticated]);
 
   // Sync user profile to Supabase public.users table on login/signup
@@ -130,26 +208,31 @@ export function AuthProvider({ children }: AuthProviderProps) {
       if (onSuccess) onSuccess();
       return true;
     },
-    [isAuthenticated]
+    [isAuthenticated, setAuthModalMode]
   );
 
   const closeModal = useCallback(() => {
     setIsModalOpen(false);
     pendingActionRef.current = null;
+    clearPersistedAuthMode();
+    clearCreateAfterAuth();
   }, []);
 
   const openSignInModal = useCallback(() => {
     setAuthModalMode('signin');
     setIsModalOpen(true);
-  }, []);
+  }, [setAuthModalMode]);
 
   const openSignUpModal = useCallback(() => {
     setAuthModalMode('signup');
     setIsModalOpen(true);
-  }, []);
+  }, [setAuthModalMode]);
 
   const openCreatePostModal = useCallback(() => {
     if (!isAuthenticated) {
+      // Remember across a possible OAuth reload so the composer still
+      // opens after sign-in (the in-memory pending action would be lost).
+      persistCreateAfterAuth();
       requireAuth(() => setIsCreatePostOpen(true));
     } else {
       setIsCreatePostOpen(true);
@@ -161,6 +244,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, []);
 
   const signOut = useCallback(async () => {
+    clearPersistedAuthMode();
+    clearCreateAfterAuth();
     await clerkSignOut();
   }, [clerkSignOut]);
 

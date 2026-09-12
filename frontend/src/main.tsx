@@ -2,7 +2,6 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { ClerkProvider } from '@clerk/clerk-react';
 import { arSA } from '@clerk/localizations';
-import { Analytics } from "@vercel/analytics/react"
 import './index.css';
 import App from './App.tsx';
 
@@ -21,7 +20,6 @@ createRoot(document.getElementById('root')!).render(
     {PUBLISHABLE_KEY ? (
       <ClerkProvider publishableKey={PUBLISHABLE_KEY} localization={arSA}>
         <App />
-        <Analytics />
       </ClerkProvider>
     ) : (
       <App />
