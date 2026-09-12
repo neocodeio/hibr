@@ -235,3 +235,31 @@ CREATE POLICY "Users can delete their own notifications"
   USING (recipient_id = (auth.jwt() ->> 'sub'));
 
 CREATE INDEX IF NOT EXISTS notifications_recipient_id_idx ON public.notifications (recipient_id, created_at DESC);
+
+-- 7. Cover image storage (run once in the SQL editor).
+-- Public bucket `post-covers`; each user uploads under their own folder
+-- `<clerk_user_id>/...`. RLS uses the Clerk JWT sub, same as the tables above.
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('post-covers', 'post-covers', true)
+ON CONFLICT (id) DO NOTHING;
+
+DROP POLICY IF EXISTS "Covers are publicly readable" ON storage.objects;
+CREATE POLICY "Covers are publicly readable"
+  ON storage.objects FOR SELECT
+  USING (bucket_id = 'post-covers');
+
+DROP POLICY IF EXISTS "Users can upload their own covers" ON storage.objects;
+CREATE POLICY "Users can upload their own covers"
+  ON storage.objects FOR INSERT
+  WITH CHECK (
+    bucket_id = 'post-covers'
+    AND (storage.foldername(name))[1] = (auth.jwt() ->> 'sub')
+  );
+
+DROP POLICY IF EXISTS "Users can delete their own covers" ON storage.objects;
+CREATE POLICY "Users can delete their own covers"
+  ON storage.objects FOR DELETE
+  USING (
+    bucket_id = 'post-covers'
+    AND (storage.foldername(name))[1] = (auth.jwt() ->> 'sub')
+  );

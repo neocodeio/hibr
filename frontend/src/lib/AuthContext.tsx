@@ -177,11 +177,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
           // Client-side sync failed — the backend sync below acts as failsafe
         }
 
-        // 2. Failsafe: Backend API sync (runs with admin privileges)
+        // 2. Failsafe: Backend API sync (RLS-enforced with the caller's JWT)
         try {
+          const syncToken = await getToken({ template: 'supabase' }).catch(() => null);
           await fetch(`${API_BASE_URL}/api/users/sync`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              ...(syncToken ? { Authorization: `Bearer ${syncToken}` } : {}),
+            },
             body: JSON.stringify({
               id: user.id,
               email: user.email,

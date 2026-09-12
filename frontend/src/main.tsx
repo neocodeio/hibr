@@ -22,7 +22,10 @@ createRoot(document.getElementById('root')!).render(
         <App />
       </ClerkProvider>
     ) : (
-      <App />
+      <div dir="rtl" style={{ padding: '4rem 1.5rem', textAlign: 'center', fontFamily: 'inherit' }}>
+        <h1>الإعداد ناقص</h1>
+        <p>مفتاح الدخول (Clerk) مو مضبوط. اضبط VITE_CLERK_PUBLISHABLE_KEY ثم أعد التحميل.</p>
+      </div>
     )}
   </StrictMode>
 );

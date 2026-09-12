@@ -8,6 +8,7 @@ import {
   updatePostInSupabase,
   parseTagsInput,
   normalizeCoverUrl,
+  uploadCoverImage,
 } from '../../lib/posts';
 import type { Post } from '../../types';
 import Button from '../ui/Button';
@@ -37,6 +38,8 @@ function PostForm({ editing, onClose, onPostCreated, onPostUpdated }: PostFormPr
   const [content, setContent] = useState('');
   const [tagsInput, setTagsInput] = useState(editing?.tags?.join('، ') ?? '');
   const [coverInput, setCoverInput] = useState(editing?.coverImageUrl ?? '');
+  const [isCoverUploading, setIsCoverUploading] = useState(false);
+  const coverFileRef = useRef<HTMLInputElement>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loadingBody, setLoadingBody] = useState(Boolean(editing));
   const [errorMsg, setErrorMsg] = useState('');
@@ -70,9 +73,35 @@ function PostForm({ editing, onClose, onPostCreated, onPostUpdated }: PostFormPr
     // eslint-disable-next-line react-hooks/exhaustive-deps -- fetch once per edited post
   }, [editing?.id]);
 
+  const handleCoverFile = async (file: File | undefined) => {
+    if (!file) return;
+    if (!canPublish) {
+      setErrorMsg('لازم تسجّل دخولك عشان ترفع صورة.');
+      return;
+    }
+    setErrorMsg('');
+    setIsCoverUploading(true);
+    try {
+      const token = await getSupabaseToken();
+      const url = await uploadCoverImage(file, user!.id, token);
+      setCoverInput(url);
+    } catch (err: unknown) {
+      setErrorMsg(
+        err instanceof Error && err.message
+          ? err.message
+          : 'ما قدرنا نرفع الصورة — حاول مرة ثانية.'
+      );
+    } finally {
+      setIsCoverUploading(false);
+      if (coverFileRef.current) coverFileRef.current.value = '';
+    }
+  };
+
+  const removeCover = () => setCoverInput('');
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (loadingBody) return;
+    if (loadingBody || isCoverUploading) return;
     if (!title.trim()) {
       setErrorMsg('حط عنوان للمقال أول');
       return;
@@ -82,7 +111,7 @@ function PostForm({ editing, onClose, onPostCreated, onPostUpdated }: PostFormPr
       return;
     }
     if (coverInput.trim() && !normalizeCoverUrl(coverInput)) {
-      setErrorMsg('حط رابط صورة صحيح يبدأ بـ http');
+      setErrorMsg('صورة الغلاف غير صالحة — ارفعها من جديد');
       return;
     }
 
@@ -218,20 +247,61 @@ function PostForm({ editing, onClose, onPostCreated, onPostUpdated }: PostFormPr
         </div>
 
         <div className="create-post-modal__field">
-          <label htmlFor="post-cover" className="create-post-modal__label">
-            صورة الغلاف <span className="create-post-modal__optional">(اختياري — رابط)</span>
-          </label>
+          <span className="create-post-modal__label" id="post-cover-label">
+            صورة الغلاف <span className="create-post-modal__optional">(اختياري)</span>
+          </span>
           <input
-            id="post-cover"
-            type="url"
-            dir="ltr"
-            className="create-post-modal__input"
-            placeholder="https://..."
-            value={coverInput}
-            onChange={(e) => setCoverInput(e.target.value)}
-            maxLength={2048}
-            autoComplete="off"
+            ref={coverFileRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp,image/gif,image/avif"
+            className="sr-only"
+            aria-labelledby="post-cover-label"
+            onChange={(e) => void handleCoverFile(e.target.files?.[0])}
+            disabled={isCoverUploading || isSubmitting}
           />
+          {coverInput.trim() ? (
+            <div className="create-post-modal__cover-preview">
+              <img
+                src={coverInput.trim()}
+                alt="معاينة صورة الغلاف"
+                className="create-post-modal__cover-img"
+              />
+              <div className="create-post-modal__cover-row">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  type="button"
+                  onClick={() => coverFileRef.current?.click()}
+                  disabled={isCoverUploading || isSubmitting}
+                >
+                  {isCoverUploading ? 'نرفع...' : 'غيّر الصورة'}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  type="button"
+                  onClick={removeCover}
+                  disabled={isCoverUploading || isSubmitting}
+                >
+                  إزالة
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              className="create-post-modal__upload"
+              onClick={() => coverFileRef.current?.click()}
+              disabled={isCoverUploading || isSubmitting}
+            >
+              <span className="create-post-modal__upload-title">
+                {isCoverUploading ? 'نرفع الصورة...' : 'ارفع صورة الغلاف'}
+              </span>
+              <span className="create-post-modal__upload-hint">
+                JPG أو PNG أو WebP — حتى 5MB
+              </span>
+            </button>
+          )}
         </div>
 
         <div className="create-post-modal__field">

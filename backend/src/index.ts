@@ -44,6 +44,43 @@ if (!supabaseKey) {
 
 const supabaseAdmin = createClient(supabaseUrl, supabaseKey);
 
+// Anon key for user-scoped writes: the frontend sends its Clerk JWT
+// (Supabase template) as `Authorization: Bearer ...` and we run the
+// mutation with that token so RLS enforces author_id = sub. Spoofing
+// another user's id then fails at the database instead of succeeding.
+const supabaseAnonKey = (() => {
+  const key = process.env.SUPABASE_ANON_KEY;
+  if (key && !/your_|example|changeme|placeholder|^xxx/i.test(key.trim())) {
+    return key.trim();
+  }
+  return '';
+})();
+
+function getWriteClient(req: express.Request) {
+  const header = req.headers.authorization;
+  if (header && header.startsWith('Bearer ') && supabaseAnonKey) {
+    const token = header.slice('Bearer '.length).trim();
+    if (token) {
+      return createClient(supabaseUrl, supabaseAnonKey, {
+        global: { headers: { Authorization: `Bearer ${token}` } },
+      });
+    }
+  }
+  return null;
+}
+
+function requireWriteClient(
+  req: express.Request,
+  res: express.Response
+) {
+  const client = getWriteClient(req);
+  if (!client) {
+    res.status(401).json({ error: 'Authentication required' });
+    return null;
+  }
+  return client;
+}
+
 // ── Security headers ────────────────────────────────────────────
 // crossOriginResourcePolicy must stay 'cross-origin': the frontend calls
 // this API cross-origin, and the default 'same-origin' would make browsers
@@ -356,8 +393,11 @@ app.get('/sitemap.xml', asyncHandler(async (_req, res) => {
   res.type('application/xml').send(xml);
 }));
 
-// Manual profile sync endpoint
+// Manual profile sync endpoint (RLS-enforced: id must equal the JWT sub,
+// so one user can never overwrite another user's profile).
 app.post('/api/users/sync', writeLimiter, asyncHandler(async (req, res) => {
+  const db = requireWriteClient(req, res);
+  if (!db) return;
   const { id, email, name, avatarUrl } = req.body ?? {};
 
   if (typeof id !== 'string' || id.length === 0 || id.length > MAX_ID_LENGTH) {
@@ -373,7 +413,7 @@ app.post('/api/users/sync', writeLimiter, asyncHandler(async (req, res) => {
     return res.status(400).json({ error: 'Invalid user fields' });
   }
 
-  const { data, error } = await supabaseAdmin.from('users').upsert(
+  const { data, error } = await db.from('users').upsert(
     {
       id,
       email,
@@ -406,8 +446,11 @@ app.get('/api/posts', asyncHandler(async (req, res) => {
   res.json({ posts: data });
 }));
 
-// Create a new post endpoint
+// Create a new post endpoint (RLS-enforced via the caller's JWT:
+// author_id must equal the token sub, so spoofing fails at the DB).
 app.post('/api/posts', writeLimiter, asyncHandler(async (req, res) => {
+  const db = requireWriteClient(req, res);
+  if (!db) return;
   const { authorId, title, slug, excerpt, content, readTime, authorName, tags, coverImageUrl, isPublished } = req.body ?? {};
 
   if (!isNonEmptyString(authorId, MAX_ID_LENGTH) || !isNonEmptyString(title, MAX_TITLE_LENGTH) || !isNonEmptyString(content, MAX_CONTENT_LENGTH)) {
@@ -457,15 +500,16 @@ app.post('/api/posts', writeLimiter, asyncHandler(async (req, res) => {
   }
   const published = isPublished === false ? false : true;
 
-  // Guarantee author exists in public.users table
-  const { data: existingUser } = await supabaseAdmin
+  // Guarantee author exists in public.users table (RLS-enforced via db:
+  // a spoofed authorId fails here instead of auto-creating a victim row).
+  const { data: existingUser } = await db
     .from('users')
     .select('id')
     .eq('id', authorId)
     .single();
 
   if (!existingUser) {
-    await supabaseAdmin.from('users').upsert(
+    const { error: userError } = await db.from('users').upsert(
       {
         id: authorId,
         email: `${authorId}@user.hibr`,
@@ -474,6 +518,9 @@ app.post('/api/posts', writeLimiter, asyncHandler(async (req, res) => {
       },
       { onConflict: 'id' }
     );
+    if (userError) {
+      return res.status(403).json({ error: 'Not the post author' });
+    }
   }
 
   const now = new Date().toISOString();
@@ -493,7 +540,7 @@ app.post('/api/posts', writeLimiter, asyncHandler(async (req, res) => {
   };
   const { cover_image_url: _cover, ...bareRow } = baseRow;
   const insertRow = (withOptional: boolean) =>
-    supabaseAdmin
+    db
       .from('posts')
       .insert([
         withOptional
@@ -522,8 +569,11 @@ app.post('/api/posts', writeLimiter, asyncHandler(async (req, res) => {
   res.json({ success: true, post: data });
 }));
 
-// Update a post endpoint (ownership always verified against the stored author)
+// Update a post endpoint (ownership verified against the stored author +
+// RLS-enforced via the caller's JWT, so spoofing fails even if authorId matches).
 app.patch('/api/posts/:id', writeLimiter, asyncHandler(async (req, res) => {
+  const db = requireWriteClient(req, res);
+  if (!db) return;
   const { id } = req.params;
   const { authorId, title, excerpt, content, tags, coverImageUrl, isPublished } = req.body ?? {};
 
@@ -607,7 +657,7 @@ app.patch('/api/posts/:id', writeLimiter, asyncHandler(async (req, res) => {
       delete row.tags;
       delete row.cover_image_url;
     }
-    return supabaseAdmin
+    return db
       .from('posts')
       .update(row)
       .eq('id', id)
@@ -629,8 +679,11 @@ app.patch('/api/posts/:id', writeLimiter, asyncHandler(async (req, res) => {
   res.json({ success: true, post: data });
 }));
 
-// Delete a post endpoint (ownership always verified against the stored author)
+// Delete a post endpoint (ownership verified against the stored author +
+// RLS-enforced via the caller's JWT).
 app.delete('/api/posts/:id', writeLimiter, asyncHandler(async (req, res) => {
+  const db = requireWriteClient(req, res);
+  if (!db) return;
   const { id } = req.params;
   const { authorId } = req.body || {};
 
@@ -653,7 +706,7 @@ app.delete('/api/posts/:id', writeLimiter, asyncHandler(async (req, res) => {
     return res.status(403).json({ error: 'Not the post author' });
   }
 
-  const { error } = await supabaseAdmin.from('posts').delete().eq('id', id);
+  const { error } = await db.from('posts').delete().eq('id', id);
 
   if (error) {
     return serverError(res, error, 'Could not delete post');

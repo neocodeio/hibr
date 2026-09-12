@@ -1,0 +1,27 @@
+# Render deploy for the Hibr Express API.
+# Connect this repo in Render → New → Blueprint, then set the env vars below.
+services:
+  - type: web
+    name: hibr-api
+    runtime: node
+    rootDir: backend
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 5000
+      - key: SITE_URL
+        value: https://hibr.space
+      - key: CORS_ORIGINS
+        value: https://hibr.space,https://www.hibr.space
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: CLERK_WEBHOOK_SECRET
+        sync: false

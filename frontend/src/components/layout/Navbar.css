@@ -382,12 +382,23 @@
     gap: var(--space-3);
   }
 
+  .navbar__start {
+    gap: var(--space-3);
+    min-width: 0;
+    flex-shrink: 1;
+  }
+
   .navbar__nav {
-    display: none;
+    gap: 0;
+  }
+
+  .navbar__link {
+    padding: var(--space-2);
+    white-space: nowrap;
   }
 
   .navbar__search--open .navbar__search-input {
-    width: min(42vw, 200px);
+    width: min(32vw, 160px);
   }
 
   .navbar__menu {

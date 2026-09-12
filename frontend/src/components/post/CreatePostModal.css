@@ -34,11 +34,19 @@
   max-width: 640px;
   max-height: 90vh;
   overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
   box-shadow:
     0 24px 48px -12px rgba(0, 0, 0, 0.18),
     0 8px 16px -8px rgba(0, 0, 0, 0.1);
   padding: clamp(var(--space-5), 4vw, var(--space-8));
   animation: createPostSlideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.create-post-modal::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
 }
 
 @keyframes createPostSlideUp {
@@ -187,6 +195,70 @@
 
 .create-post-modal__excerpt-textarea {
   min-height: 76px;
+}
+
+/* ── Cover upload ─────────────────────────────────────────── */
+.create-post-modal__upload {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 108px;
+  padding: var(--space-4);
+  border: 1.5px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  background-color: var(--color-surface);
+  color: var(--color-ink);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.create-post-modal__upload:hover:not(:disabled) {
+  border-color: var(--color-subtle);
+  background-color: var(--color-hover);
+}
+
+.create-post-modal__upload:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.create-post-modal__upload:focus-visible {
+  outline: 2px solid var(--color-ink);
+  outline-offset: 2px;
+}
+
+.create-post-modal__upload-title {
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+}
+
+.create-post-modal__upload-hint {
+  font-size: var(--font-size-xs);
+  color: var(--color-subtle);
+}
+
+.create-post-modal__cover-preview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.create-post-modal__cover-img {
+  width: 100%;
+  max-height: 220px;
+  object-fit: cover;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background-color: var(--color-surface);
+}
+
+.create-post-modal__cover-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
 }
 
 .create-post-modal__content-textarea {

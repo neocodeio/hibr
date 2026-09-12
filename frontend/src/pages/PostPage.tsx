@@ -109,7 +109,7 @@ function PostPage() {
   );
   const { sync: syncLike } = like;
   const { bookmarkIds, bookmarksOn, toggleBookmark } = useSocial();
-  useDocumentMeta(post?.title, post?.excerpt || undefined);
+  useDocumentMeta(post?.title, post?.excerpt || undefined, post?.coverImageUrl || undefined);
 
   // Reset the comments loading flag whenever a different post is shown
   // (render-phase derived state — the effect below only clears it).

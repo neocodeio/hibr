@@ -45,6 +45,8 @@ export function normalizeCoverUrl(raw: unknown): string | undefined {
   if (typeof raw !== 'string') return undefined;
   const url = raw.trim();
   if (!url) return undefined;
+  // Allow uploaded previews (blob:) as well as http(s) URLs.
+  if (url.startsWith('blob:')) return url.slice(0, 2048);
   try {
     const parsed = new URL(url);
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return undefined;
@@ -52,6 +54,55 @@ export function normalizeCoverUrl(raw: unknown): string | undefined {
     return undefined;
   }
   return url.slice(0, 2048);
+}
+
+export const COVER_BUCKET = 'post-covers';
+export const MAX_COVER_BYTES = 5 * 1024 * 1024;
+const ALLOWED_COVER_TYPES = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/gif',
+  'image/avif',
+]);
+
+/**
+ * Upload a cover image to Supabase Storage and return its public URL.
+ * Uses the caller's Clerk JWT (Supabase template) so storage RLS applies.
+ * Throws with an Arabic message when validation or upload fails.
+ */
+export async function uploadCoverImage(
+  file: File,
+  authorId: string,
+  clerkToken: string | null
+): Promise<string> {
+  if (!file || file.size === 0) throw new Error('اختر صورة أول');
+  if (file.type && !ALLOWED_COVER_TYPES.has(file.type)) {
+    throw new Error('اختر صورة بصيغة JPG أو PNG أو WebP');
+  }
+  if (file.size > MAX_COVER_BYTES) {
+    throw new Error('الصورة كبيرة — الحد 5MB');
+  }
+  if (!authorId) throw new Error('لازم تسجّل دخولك عشان ترفع صورة.');
+
+  const safeName = file.name.replace(/[^\w.\-]+/g, '_').slice(-80) || 'cover';
+  const path = `${authorId}/${Date.now()}-${safeName}`;
+  const client = clerkToken ? getSupabaseClient(clerkToken) : supabase;
+
+  const { error } = await client.storage.from(COVER_BUCKET).upload(path, file, {
+    contentType: file.type || undefined,
+    upsert: false,
+  });
+  if (error) {
+    if (/bucket|Bucket|not found/i.test(error.message)) {
+      throw new Error('مخزن الصور مو مهيأ — نفّذ SQL الـ bucket في Supabase ثم حاول.');
+    }
+    throw new Error(`ما قدرنا نرفع الصورة. ${error.message}`);
+  }
+  const { data } = client.storage.from(COVER_BUCKET).getPublicUrl(path);
+  const url = data?.publicUrl?.trim();
+  if (!url) throw new Error('ما قدرنا نرفع الصورة — حاول مرة ثانية.');
+  return url;
 }
 
 /**
@@ -184,6 +235,13 @@ export function formatDbPost(item: DbPostRow): Post {
   };
 }
 
+/** Authorization header for backend failsafe calls (RLS-enforced there too). */
+function backendHeaders(clerkToken: string | null): Record<string, string> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (clerkToken) headers.Authorization = `Bearer ${clerkToken}`;
+  return headers;
+}
+
 /**
  * Ensure a row for this author exists in public.users before inserting a post.
  * posts.author_id has a foreign key to users(id), so the insert fails with a
@@ -228,10 +286,10 @@ async function ensureAuthorExists(
     }
   }
 
-  // 3. Backend admin upsert (service role key — bypasses RLS)
+  // 3. Backend admin upsert (RLS-enforced with the caller's JWT)
   const res = await fetch(`${API_BASE_URL}/api/users/sync`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: backendHeaders(clerkToken),
     body: JSON.stringify({
       id: profile.id,
       email: profile.email,
@@ -301,11 +359,11 @@ export async function deletePostFromSupabase(
     );
   }
 
-  // 2. Failsafe: Express backend API delete (service role key bypasses RLS)
+  // 2. Failsafe: Express backend API delete (RLS-enforced with the JWT)
   try {
     const res = await fetch(`${API_BASE_URL}/api/posts/${postId}`, {
       method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
+      headers: backendHeaders(clerkToken),
       body: JSON.stringify({ authorId }),
     });
 
@@ -459,12 +517,12 @@ export async function createPostInSupabase(
     );
   }
 
-  // 2. Failsafe: Express backend API insert (service role key bypasses RLS)
+  // 2. Failsafe: Express backend API insert (RLS-enforced with the JWT)
   if (!savedPost) {
     try {
       const res = await fetch(`${API_BASE_URL}/api/posts`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: backendHeaders(clerkToken),
         body: JSON.stringify({
           authorId: profile.id,
           title: payload.title,
@@ -543,7 +601,7 @@ export async function setPostPublished(
   try {
     const res = await fetch(`${API_BASE_URL}/api/posts/${postId}`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: backendHeaders(clerkToken),
       body: JSON.stringify({ authorId, isPublished: published }),
     });
     const json = await res.json().catch(() => null);
@@ -647,7 +705,7 @@ export async function updatePostInSupabase(
   try {
     const res = await fetch(`${API_BASE_URL}/api/posts/${postId}`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: backendHeaders(clerkToken),
       body: JSON.stringify({
         authorId,
         title,
