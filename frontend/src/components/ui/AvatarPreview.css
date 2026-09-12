@@ -1,0 +1,139 @@
+/* ============================================================
+   AvatarPreview — minimal image lightbox (profile photo).
+   Dark blurred backdrop, large ringed photo, caption.
+   RTL-first, theme-agnostic, responsive + reduced motion.
+   ============================================================ */
+
+.avatar-preview-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-6);
+  background-color: rgba(0, 0, 0, 0.72);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  animation: avatar-preview-fade 0.18s ease-out;
+}
+
+@keyframes avatar-preview-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.avatar-preview__close {
+  position: fixed;
+  top: max(16px, env(safe-area-inset-top));
+  inset-inline-end: max(16px, env(safe-area-inset-left));
+  width: 40px;
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-full);
+  color: #e5e5e5;
+  background-color: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  cursor: pointer;
+  transition: background-color 0.15s ease, transform 0.15s ease;
+}
+
+.avatar-preview__close:hover {
+  background-color: rgba(255, 255, 255, 0.22);
+}
+
+.avatar-preview__close:active {
+  transform: scale(0.94);
+}
+
+.avatar-preview__close:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+.avatar-preview__close svg {
+  display: block;
+}
+
+.avatar-preview__figure {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+  margin: 0;
+  max-width: 100%;
+  animation: avatar-preview-pop 0.22s ease-out;
+}
+
+@keyframes avatar-preview-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.avatar-preview__image {
+  width: min(72vw, 300px);
+  aspect-ratio: 1 / 1;
+  border-radius: var(--radius-full);
+  object-fit: cover;
+  display: block;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  box-shadow:
+    0 0 0 6px rgba(255, 255, 255, 0.08),
+    0 24px 64px -16px rgba(0, 0, 0, 0.6);
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.avatar-preview__caption {
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-medium);
+  color: #fafafa;
+  line-height: 1.5;
+  text-align: center;
+  overflow-wrap: break-word;
+  max-width: min(80vw, 340px);
+}
+
+/* ── Responsive — small phones ─────────────────────────────── */
+@media (max-width: 480px) {
+  .avatar-preview-backdrop {
+    padding: var(--space-4);
+  }
+
+  .avatar-preview__image {
+    width: min(76vw, 260px);
+  }
+
+  .avatar-preview__close {
+    width: 36px;
+    height: 36px;
+  }
+}
+
+/* ── Reduced motion ────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .avatar-preview-backdrop,
+  .avatar-preview__figure {
+    animation: none;
+  }
+
+  .avatar-preview__close {
+    transition: none;
+  }
+
+  .avatar-preview__close:active {
+    transform: none;
+  }
+}

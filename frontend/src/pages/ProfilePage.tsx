@@ -11,6 +11,7 @@ import { fetchFollowCounts, subscribeFollowsRealtime } from '../lib/social';
 import type { Post } from '../types';
 import PostCard from '../components/post/PostCard';
 import Button from '../components/ui/Button';
+import AvatarPreview from '../components/ui/AvatarPreview';
 import './ProfilePage.css';
 
 interface ProfileUser {
@@ -48,6 +49,7 @@ function ProfilePage() {
   const [followerCount, setFollowerCount] = useState(0);
   const [followingCount, setFollowingCount] = useState(0);
   const [followBusy, setFollowBusy] = useState(false);
+  const [isAvatarOpen, setIsAvatarOpen] = useState(false);
   const { followingIds, followsOn, toggleFollow } = useSocial();
 
   const handlePostDeleted = (postId: string) => {
@@ -230,19 +232,28 @@ function ProfilePage() {
         </Link>
 
         <header className="profile-page__header">
-          <div className="profile-page__avatar" aria-hidden="true">
-            {profile.avatarUrl ? (
+          {profile.avatarUrl ? (
+            <button
+              type="button"
+              className="profile-page__avatar profile-page__avatar--clickable"
+              onClick={() => setIsAvatarOpen(true)}
+              aria-label={`عرض صورة ${profile.name}`}
+              aria-haspopup="dialog"
+            >
               <img
                 className="profile-page__avatar-image"
                 src={profile.avatarUrl}
                 alt=""
+                loading="lazy"
               />
-            ) : (
+            </button>
+          ) : (
+            <div className="profile-page__avatar" aria-hidden="true">
               <span className="profile-page__avatar-fallback">
                 {getInitial(profile.name)}
               </span>
-            )}
-          </div>
+            </div>
+          )}
 
           <div className="profile-page__identity">
             <h1 className="profile-page__name">
@@ -254,19 +265,28 @@ function ProfilePage() {
             <p className="profile-page__handle" dir="ltr">
               @{profile.handle}
             </p>
-            <p className="profile-page__stats">
-              {posts.length} {posts.length === 1 ? 'مقال' : 'مقالات'}
+            <div className="profile-page__stats" role="list" aria-label="إحصائيات الحساب">
+              <span className="profile-page__stat" role="listitem">
+                <span className="profile-page__stat-value">{posts.length}</span>
+                <span className="profile-page__stat-label">
+                  {posts.length === 1 ? 'مقال' : 'مقالات'}
+                </span>
+              </span>
               {followsOn && (
                 <>
-                  <span aria-hidden="true"> · </span>
-                  <span>
-                    {followerCount} {pluralFollowers(followerCount)}
+                  <span className="profile-page__stat" role="listitem">
+                    <span className="profile-page__stat-value">{followerCount}</span>
+                    <span className="profile-page__stat-label">
+                      {pluralFollowers(followerCount)}
+                    </span>
                   </span>
-                  <span aria-hidden="true"> · </span>
-                  <span>يتابع {followingCount}</span>
+                  <span className="profile-page__stat" role="listitem">
+                    <span className="profile-page__stat-value">{followingCount}</span>
+                    <span className="profile-page__stat-label">يتابع</span>
+                  </span>
                 </>
               )}
-            </p>
+            </div>
             {showFollowButton && (
               <div className="profile-page__follow">
                 <Button
@@ -314,6 +334,12 @@ function ProfilePage() {
           )}
         </section>
       </div>
+
+      <AvatarPreview
+        src={isAvatarOpen && profile.avatarUrl ? profile.avatarUrl : null}
+        name={profile.name}
+        onClose={() => setIsAvatarOpen(false)}
+      />
     </main>
   );
 }

@@ -54,9 +54,9 @@
 /* ── Header ────────────────────────────────────────────────── */
 .profile-page__header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: var(--space-5);
-  padding-bottom: var(--space-8);
+  padding: var(--space-2) 0 var(--space-8);
   margin-bottom: var(--space-8);
   border-bottom: var(--border);
   min-width: 0;
@@ -68,6 +68,7 @@
   border-radius: var(--radius-full);
   background-color: var(--color-surface);
   border: 1px solid var(--color-border);
+  box-shadow: 0 0 0 4px var(--color-surface);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -83,6 +84,24 @@
   display: block;
 }
 
+/* Clickable avatar (opens the photo preview) — keeps the exact avatar
+   look, only adding affordance. */
+button.profile-page__avatar {
+  padding: 0;
+  font: inherit;
+  cursor: zoom-in;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+button.profile-page__avatar:hover {
+  transform: scale(1.04);
+}
+
+button.profile-page__avatar:focus-visible {
+  outline: 2px solid var(--color-ink);
+  outline-offset: 3px;
+}
+
 .profile-page__avatar-fallback {
   font-size: var(--font-size-2xl);
   font-weight: var(--font-weight-semibold);
@@ -94,57 +113,99 @@
 .profile-page__identity {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
+  align-items: flex-start;
+  gap: 2px;
   min-width: 0;
+  flex: 1;
+  padding-top: 2px;
 }
 
 .profile-page__name {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: var(--space-3);
-  font-size: var(--font-size-xl);
+  gap: var(--space-2);
+  margin: 0;
+  font-size: 1.375rem;
   font-weight: var(--font-weight-semibold);
   color: var(--color-ink);
   letter-spacing: var(--letter-spacing-tight);
   line-height: 1.3;
   overflow-wrap: break-word;
+  text-wrap: balance;
 }
 
 .profile-page__badge {
-  font-size: var(--font-size-xs);
+  font-size: 11px;
   font-weight: var(--font-weight-medium);
   color: var(--color-muted);
   background-color: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-full);
-  padding: 2px var(--space-3);
-  line-height: 1.5;
+  padding: 3px var(--space-3);
+  line-height: 1.4;
   white-space: nowrap;
 }
 
 .profile-page__handle {
   font-size: var(--font-size-sm);
   color: var(--color-subtle);
-  line-height: 1.4;
-  text-align: end;
+  line-height: 1.5;
   overflow-wrap: break-word;
 }
 
+/* Segmented stats — number over label, hairline dividers. */
 .profile-page__stats {
-  font-size: var(--font-size-sm);
-  color: var(--color-muted);
-  line-height: 1.4;
+  display: flex;
+  align-items: stretch;
+  flex-wrap: wrap;
+  margin-top: var(--space-3);
+}
+
+.profile-page__stat {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  padding-inline-end: var(--space-4);
+  margin-inline-end: var(--space-4);
+  border-inline-end: 1px solid var(--color-border);
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.profile-page__stat:last-child {
+  padding-inline-end: 0;
+  margin-inline-end: 0;
+  border-inline-end: none;
+}
+
+.profile-page__stat-value {
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-ink);
+  line-height: 1.3;
+}
+
+.profile-page__stat-label {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-regular);
+  color: var(--color-subtle);
+  line-height: 1.4;
 }
 
 .profile-page__follow {
-  margin-top: var(--space-2);
+  margin-top: var(--space-4);
+}
+
+.profile-page__follow .btn {
+  min-width: 132px;
+  border-radius: var(--radius-full);
 }
 
 .profile-page__follow-inner {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: var(--space-2);
 }
 
@@ -299,20 +360,42 @@
   }
 
   .profile-page__header {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
     gap: var(--space-4);
   }
 
   .profile-page__avatar {
-    width: 72px;
-    height: 72px;
+    width: 76px;
+    height: 76px;
   }
 
   .profile-page__avatar-fallback {
     font-size: var(--font-size-xl);
   }
 
+  .profile-page__identity {
+    align-items: center;
+  }
+
   .profile-page__name {
     font-size: var(--font-size-lg);
+    justify-content: center;
+  }
+
+  .profile-page__stats {
+    justify-content: center;
+  }
+
+  .profile-page__follow {
+    width: 100%;
+    max-width: 280px;
+  }
+
+  .profile-page__follow .btn {
+    width: 100%;
+    min-width: 0;
   }
 
   .profile-page__empty {
@@ -329,7 +412,12 @@
     animation: none;
   }
 
-  .profile-page__back {
+  .profile-page__back,
+  button.profile-page__avatar {
     transition: none;
+  }
+
+  button.profile-page__avatar:hover {
+    transform: none;
   }
 }
