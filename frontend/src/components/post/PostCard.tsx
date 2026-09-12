@@ -265,88 +265,112 @@ function PostCard({ post, onDeleted, onPostUpdated, stats = null }: PostCardProp
         </div>
       )}
 
-      {/* Content */}
-      <Link to={getPostPath(post)} className="post-card__content">
-        <h2 className="post-card__title" id={titleId}>
-          {!post.isPublished && (
-            <span className="post-card__draft-badge">مسودة</span>
-          )}
-          {post.title}
-        </h2>
-        <p className="post-card__excerpt">{post.excerpt}</p>
-      </Link>
-
-      {/* Tags — tap to filter the feed by tag */}
-      {post.tags && post.tags.length > 0 && (
-        <div className="post-card__tags">
-          {post.tags.slice(0, 3).map((tag) => (
-            <Link
-              key={tag}
-              to={`/?tag=${encodeURIComponent(tag)}`}
-              className="post-card__tag"
-              onClick={(e) => e.stopPropagation()}
-              aria-label={`مقالات بوسم ${tag}`}
-            >
-              {tag}
-            </Link>
-          ))}
-        </div>
-      )}
-
-      {/* Footer */}
-      <div className="post-card__footer">
-        <div className="post-card__actions">
-          <button
-            type="button"
-            className={`post-card__action${like.liked ? ' post-card__action--liked' : ''}`}
-            onClick={handleLike}
-            aria-pressed={like.liked}
-            aria-label={`أعجبني — ${like.likesCount}`}
-          >
-            <FavouriteIcon
-              size={18}
-              strokeWidth={1.5}
-              fill={like.liked ? 'currentColor' : 'none'}
-            />
-            <span className="post-card__action-count">{like.likesCount}</span>
-          </button>
-
-          <Link
-            to={`${getPostPath(post)}#comments`}
-            className="post-card__action"
-            aria-label={`تعليقات — ${commentsCount}`}
-          >
-            <BubbleChatIcon size={18} strokeWidth={1.5} />
-            <span className="post-card__action-count">{commentsCount}</span>
+      {/* Main row: text on the start side, cover on the end side (left in RTL) */}
+      <div className="post-card__main">
+        <div className="post-card__body">
+          {/* Content */}
+          <Link to={getPostPath(post)} className="post-card__content">
+            <h2 className="post-card__title" id={titleId}>
+              {!post.isPublished && (
+                <span className="post-card__draft-badge">مسودة</span>
+              )}
+              {post.title}
+            </h2>
+            <p className="post-card__excerpt">{post.excerpt}</p>
           </Link>
 
-          <button
-            type="button"
-            className="post-card__action"
-            onClick={handleShare}
-            aria-label="مشاركة"
-            title="مشاركة"
-          >
-            <Share01Icon size={18} strokeWidth={1.5} />
-          </button>
-
-          {bookmarksOn && (
-            <button
-              type="button"
-              className={`post-card__action${isSaved ? ' post-card__action--saved' : ''}`}
-              onClick={handleBookmark}
-              aria-pressed={isSaved}
-              aria-label={isSaved ? 'محفوظ' : 'احفظ المقال'}
-              title={isSaved ? 'محفوظ' : 'احفظ المقال'}
-            >
-              <Bookmark02Icon
-                size={18}
-                strokeWidth={1.5}
-                fill={isSaved ? 'currentColor' : 'none'}
-              />
-            </button>
+          {/* Tags — tap to filter the feed by tag */}
+          {post.tags && post.tags.length > 0 && (
+            <div className="post-card__tags">
+              {post.tags.slice(0, 3).map((tag) => (
+                <Link
+                  key={tag}
+                  to={`/?tag=${encodeURIComponent(tag)}`}
+                  className="post-card__tag"
+                  onClick={(e) => e.stopPropagation()}
+                  aria-label={`مقالات بوسم ${tag}`}
+                >
+                  {tag}
+                </Link>
+              ))}
+            </div>
           )}
+
+          {/* Footer */}
+          <div className="post-card__footer">
+            <div className="post-card__actions">
+              <button
+                type="button"
+                className={`post-card__action${like.liked ? ' post-card__action--liked' : ''}`}
+                onClick={handleLike}
+                aria-pressed={like.liked}
+                aria-label={`أعجبني — ${like.likesCount}`}
+              >
+                <FavouriteIcon
+                  size={18}
+                  strokeWidth={1.5}
+                  fill={like.liked ? 'currentColor' : 'none'}
+                />
+                <span className="post-card__action-count">{like.likesCount}</span>
+              </button>
+
+              <Link
+                to={`${getPostPath(post)}#comments`}
+                className="post-card__action"
+                aria-label={`تعليقات — ${commentsCount}`}
+              >
+                <BubbleChatIcon size={18} strokeWidth={1.5} />
+                <span className="post-card__action-count">{commentsCount}</span>
+              </Link>
+
+              <button
+                type="button"
+                className="post-card__action"
+                onClick={handleShare}
+                aria-label="مشاركة"
+                title="مشاركة"
+              >
+                <Share01Icon size={18} strokeWidth={1.5} />
+              </button>
+
+              {bookmarksOn && (
+                <button
+                  type="button"
+                  className={`post-card__action${isSaved ? ' post-card__action--saved' : ''}`}
+                  onClick={handleBookmark}
+                  aria-pressed={isSaved}
+                  aria-label={isSaved ? 'محفوظ' : 'احفظ المقال'}
+                  title={isSaved ? 'محفوظ' : 'احفظ المقال'}
+                >
+                  <Bookmark02Icon
+                    size={18}
+                    strokeWidth={1.5}
+                    fill={isSaved ? 'currentColor' : 'none'}
+                  />
+                </button>
+              )}
+            </div>
+          </div>
         </div>
+
+        {post.coverImageUrl && (
+          <Link
+            to={getPostPath(post)}
+            className="post-card__cover"
+            aria-hidden="true"
+            tabIndex={-1}
+          >
+            <img
+              className="post-card__cover-img"
+              src={post.coverImageUrl}
+              alt=""
+              loading="lazy"
+              onError={(e) => {
+                e.currentTarget.closest('.post-card__cover')?.remove();
+              }}
+            />
+          </Link>
+        )}
       </div>
 
       <ShareModal post={isShareOpen ? post : null} onClose={() => setIsShareOpen(false)} />
