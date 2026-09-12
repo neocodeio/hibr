@@ -10,6 +10,8 @@ import FeedPage from './pages/FeedPage';
 import PostPage from './pages/PostPage';
 import ProfilePage from './pages/ProfilePage';
 import SavedPage from './pages/SavedPage';
+import NotificationsPage from './pages/NotificationsPage';
+import TrendingPage from './pages/TrendingPage';
 import { getPostPath } from './lib/posts';
 import { notifyPostCreated } from './lib/postEvents';
 import { PostsProvider } from './lib/PostsContext';
@@ -64,7 +66,9 @@ function App() {
               <Route path="/" element={<FeedPage />} />
               <Route path="/post/:slug" element={<PostPage />} />
               <Route path="/profile/:username" element={<ProfilePage />} />
-              <Route path="/saved" element={<SavedPage />} />
+                <Route path="/saved" element={<SavedPage />} />
+                <Route path="/notifications" element={<NotificationsPage />} />
+                <Route path="/trending" element={<TrendingPage />} />
               {/* Unknown URLs redirect home instead of rendering a blank page */}
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>

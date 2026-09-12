@@ -7,21 +7,27 @@ import {
   Bookmark02Icon,
   MoreHorizontalIcon,
   Delete02Icon,
+  PencilEdit01Icon,
+  Sent02Icon,
 } from 'hugeicons-react';
 
 import { useAuth } from '../../lib/AuthContext';
+import { usePosts } from '../../lib/PostsContext';
 import { useSocial } from '../../lib/SocialContext';
+import { notifyLikeChange } from '../../lib/notifications';
 import { formatRelativeTime } from '../../lib/date';
-import { getProfilePath, getPostPath, deletePostFromSupabase } from '../../lib/posts';
+import { getProfilePath, getPostPath, deletePostFromSupabase, setPostPublished } from '../../lib/posts';
 import { usePostLike } from '../../lib/usePostLike';
 import type { Post } from '../../types';
 import type { PostsStats } from '../../lib/interactions';
 import ShareModal from './ShareModal';
+import CreatePostModal from './CreatePostModal';
 import './PostCard.css';
 
 interface PostCardProps {
   post: Post;
   onDeleted?: (postId: string) => void;
+  onPostUpdated?: (post: Post) => void;
   stats?: PostsStats | null;
 }
 
@@ -29,17 +35,25 @@ function getInitial(name: string): string {
   return name.trim().charAt(0);
 }
 
-function PostCard({ post, onDeleted, stats = null }: PostCardProps) {
+function PostCard({ post, onDeleted, onPostUpdated, stats = null }: PostCardProps) {
   const { isAuthenticated, requireAuth, user, getSupabaseToken } = useAuth();
   const { bookmarkIds, bookmarksOn, toggleBookmark } = useSocial();
+  const { updatePost } = usePosts();
   const isSaved = bookmarkIds.has(post.id);
   const [isShareOpen, setIsShareOpen] = useState(false);
+  const [isEditOpen, setIsEditOpen] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isPublishing, setIsPublishing] = useState(false);
   const [deleteError, setDeleteError] = useState('');
   const [commentsCount, setCommentsCount] = useState(post.commentsCount);
   const menuRef = useRef<HTMLDivElement>(null);
   const titleId = `post-card-title-${post.id}`;
+
+  const applyUpdatedPost = (updated: Post) => {
+    if (onPostUpdated) onPostUpdated(updated);
+    else updatePost(updated);
+  };
 
   const isOwner = Boolean(isAuthenticated && user && user.id === post.author.id);
   const like = usePostLike(
@@ -82,14 +96,17 @@ function PostCard({ post, onDeleted, stats = null }: PostCardProps) {
     };
   }, [isMenuOpen]);
 
-  const handleLike = (e: React.MouseEvent) => {
+  const handleLike = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
     if (!isAuthenticated || !user) {
       requireAuth();
       return;
     }
-    void like.toggle();
+    const next = await like.toggle();
+    if (next === null) return;
+    const token = await getSupabaseToken();
+    notifyLikeChange(post.id, post.slug, post.author.id, user.id, token, next);
   };
 
   const handleShare = (e: React.MouseEvent) => {
@@ -127,6 +144,33 @@ function PostCard({ post, onDeleted, stats = null }: PostCardProps) {
       );
     } finally {
       setIsDeleting(false);
+    }
+  };
+
+  const handleEdit = () => {
+    setDeleteError('');
+    setIsMenuOpen(false);
+    setIsEditOpen(true);
+  };
+
+  const handlePublish = async () => {
+    if (isPublishing || !user) return;
+    setIsPublishing(true);
+    setDeleteError('');
+
+    try {
+      const token = await getSupabaseToken();
+      const updated = await setPostPublished(post.id, post.author.id, token, true);
+      setIsMenuOpen(false);
+      applyUpdatedPost(updated);
+    } catch (err: unknown) {
+      setDeleteError(
+        err instanceof Error && err.message
+          ? err.message
+          : 'ما قدرنا ننشر المقال، حاول مرة ثانية.'
+      );
+    } finally {
+      setIsPublishing(false);
     }
   };
 
@@ -185,6 +229,27 @@ function PostCard({ post, onDeleted, stats = null }: PostCardProps) {
                   {deleteError}
                 </p>
               )}
+              {!post.isPublished && (
+                <button
+                  type="button"
+                  className="post-card__menu-item"
+                  role="menuitem"
+                  onClick={handlePublish}
+                  disabled={isPublishing}
+                >
+                  <Sent02Icon size={18} strokeWidth={1.5} />
+                  <span>{isPublishing ? 'ننشر المقال...' : 'نشر المقال'}</span>
+                </button>
+              )}
+              <button
+                type="button"
+                className="post-card__menu-item"
+                role="menuitem"
+                onClick={handleEdit}
+              >
+                <PencilEdit01Icon size={18} strokeWidth={1.5} />
+                <span>تعديل المقال</span>
+              </button>
               <button
                 type="button"
                 className="post-card__menu-item post-card__menu-item--danger"
@@ -202,7 +267,12 @@ function PostCard({ post, onDeleted, stats = null }: PostCardProps) {
 
       {/* Content */}
       <Link to={getPostPath(post)} className="post-card__content">
-        <h2 className="post-card__title" id={titleId}>{post.title}</h2>
+        <h2 className="post-card__title" id={titleId}>
+          {!post.isPublished && (
+            <span className="post-card__draft-badge">مسودة</span>
+          )}
+          {post.title}
+        </h2>
         <p className="post-card__excerpt">{post.excerpt}</p>
       </Link>
 
@@ -280,6 +350,17 @@ function PostCard({ post, onDeleted, stats = null }: PostCardProps) {
       </div>
 
       <ShareModal post={isShareOpen ? post : null} onClose={() => setIsShareOpen(false)} />
+      {isEditOpen && (
+        <CreatePostModal
+          isOpen={isEditOpen}
+          onClose={() => setIsEditOpen(false)}
+          editing={post}
+          onPostUpdated={(updated) => {
+            setIsEditOpen(false);
+            applyUpdatedPost(updated);
+          }}
+        />
+      )}
     </article>
   );
 }

@@ -1,4 +1,5 @@
 import { getSupabaseClient, supabase } from './supabase';
+import { isMissingColumnError } from './posts';
 import type { Author, PostComment } from '../types';
 
 /**
@@ -35,6 +36,7 @@ function formatCommentAuthor(raw: {
 function formatCommentRow(row: {
   id: string;
   post_id: string;
+  parent_id?: string | null;
   content?: string | null;
   created_at?: string | null;
   author: {
@@ -47,6 +49,7 @@ function formatCommentRow(row: {
   return {
     id: row.id,
     postId: row.post_id,
+    parentId: typeof row.parent_id === 'string' && row.parent_id ? row.parent_id : null,
     content: row.content || '',
     createdAt: row.created_at || new Date().toISOString(),
     author: formatCommentAuthor(row.author),
@@ -137,21 +140,60 @@ export async function addComment(
   postId: string,
   userId: string,
   content: string,
-  clerkToken: string | null
+  clerkToken: string | null,
+  parentId?: string | null
 ): Promise<PostComment> {
   const text = content.trim();
   if (!text) throw new Error('اكتب تعليقك أول.');
   if (!clerkToken) throw new Error('لازم تسجّل دخولك عشان تعلّق.');
 
   const client = getSupabaseClient(clerkToken);
+  const baseRow = { post_id: postId, user_id: userId, content: text };
+  const insertRow = (withParent: boolean) =>
+    client
+      .from('comments')
+      .insert([
+        withParent && parentId ? { ...baseRow, parent_id: parentId } : baseRow,
+      ])
+      .select('*, author:users!comments_user_id_fkey(*)')
+      .single();
+
+  let { data, error } = await insertRow(true);
+
+  // Pre-migration tables have no parent_id column — retry bare so the
+  // reply still saves as a top-level comment instead of failing.
+  if (error && parentId && isMissingColumnError(error)) {
+    console.warn('parent_id column missing, saving reply as top-level comment.');
+    ({ data, error } = await insertRow(false));
+  }
+
+  if (error || !data) {
+    throw new Error(error?.message || 'ما قدرنا ننشر التعليق، حاول مرة ثانية.');
+  }
+  return formatCommentRow(data);
+}
+
+export async function updateComment(
+  commentId: string,
+  userId: string,
+  content: string,
+  clerkToken: string | null
+): Promise<PostComment> {
+  const text = content.trim();
+  if (!text) throw new Error('اكتب تعليقك أول.');
+  if (!clerkToken) throw new Error('لازم تسجّل دخولك عشان تعدّل.');
+
+  const client = getSupabaseClient(clerkToken);
   const { data, error } = await client
     .from('comments')
-    .insert({ post_id: postId, user_id: userId, content: text })
+    .update({ content: text })
+    .eq('id', commentId)
+    .eq('user_id', userId)
     .select('*, author:users!comments_user_id_fkey(*)')
     .single();
 
   if (error || !data) {
-    throw new Error(error?.message || 'ما قدرنا ننشر التعليق، حاول مرة ثانية.');
+    throw new Error(error?.message || 'ما قدرنا نحفظ التعديل، حاول مرة ثانية.');
   }
   return formatCommentRow(data);
 }

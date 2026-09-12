@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import {
   FavouriteIcon,
@@ -17,9 +17,13 @@ import {
   fetchPostsStats,
   fetchComments,
   addComment,
+  updateComment,
   subscribePostsRealtime,
 } from '../lib/interactions';
 import { usePostLike } from '../lib/usePostLike';
+import { notifyLikeChange, notifyNewComment } from '../lib/notifications';
+import { renderMarkdown } from '../lib/markdown';
+import { useDocumentMeta } from '../lib/documentMeta';
 import type { Post, PostComment } from '../types';
 import ShareModal from '../components/post/ShareModal';
 import Button from '../components/ui/Button';
@@ -61,6 +65,9 @@ function PostPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isShareOpen, setIsShareOpen] = useState(false);
   const [readProgress, setReadProgress] = useState(0);
+  const [coverOk, setCoverOk] = useState(true);
+
+  const bodyHtml = useMemo(() => renderMarkdown(content), [content]);
 
   const [comments, setComments] = useState<PostComment[]>([]);
   const [commentsCount, setCommentsCount] = useState(0);
@@ -69,6 +76,29 @@ function PostPage() {
   const [commentDraft, setCommentDraft] = useState('');
   const [commentPosting, setCommentPosting] = useState(false);
   const [commentError, setCommentError] = useState('');
+  const [replyTo, setReplyTo] = useState<string | null>(null);
+  const [replyDraft, setReplyDraft] = useState('');
+  const [replyPosting, setReplyPosting] = useState(false);
+  const [replyError, setReplyError] = useState('');
+  const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState('');
+  const [editSaving, setEditSaving] = useState(false);
+
+  // Single-level threads: top-level comments with their replies grouped.
+  const topComments = useMemo(
+    () => comments.filter((c) => !c.parentId),
+    [comments]
+  );
+  const repliesByParent = useMemo(() => {
+    const map = new Map<string, PostComment[]>();
+    for (const c of comments) {
+      if (!c.parentId) continue;
+      const list = map.get(c.parentId) ?? [];
+      list.push(c);
+      map.set(c.parentId, list);
+    }
+    return map;
+  }, [comments]);
 
   const like = usePostLike(
     post?.id || '',
@@ -79,6 +109,7 @@ function PostPage() {
   );
   const { sync: syncLike } = like;
   const { bookmarkIds, bookmarksOn, toggleBookmark } = useSocial();
+  useDocumentMeta(post?.title, post?.excerpt || undefined);
 
   // Reset the comments loading flag whenever a different post is shown
   // (render-phase derived state — the effect below only clears it).
@@ -133,6 +164,8 @@ function PostPage() {
           comments_count?: number | null;
           author_id?: string | null;
           tags?: unknown;
+          is_published?: boolean | null;
+          cover_image_url?: string | null;
           author?: {
             id?: string | null;
             name?: string | null;
@@ -175,9 +208,15 @@ function PostPage() {
                   .filter((tag: unknown): tag is string => typeof tag === 'string')
                   .slice(0, 5)
               : undefined,
+            isPublished: data.is_published !== false,
+            coverImageUrl:
+              typeof data.cover_image_url === 'string' && data.cover_image_url
+                ? data.cover_image_url
+                : undefined,
           };
           setPost(formattedPost);
           setContent(data.content || data.excerpt || '');
+          setCoverOk(true);
           setCommentsCount(formattedPost.commentsCount);
           setIsLoading(false);
           return;
@@ -270,12 +309,15 @@ function PostPage() {
     );
   }
 
-  const handleLike = () => {
+  const handleLike = async () => {
     if (!isAuthenticated || !user) {
       requireAuth();
       return;
     }
-    void like.toggle();
+    const next = await like.toggle();
+    if (next === null || !post) return;
+    const token = await getSupabaseToken();
+    notifyLikeChange(post.id, post.slug, post.author.id, user.id, token, next);
   };
 
   const isSaved = post ? bookmarkIds.has(post.id) : false;
@@ -300,6 +342,15 @@ function PostPage() {
       setComments((prev) => [...prev, created]);
       setCommentsCount((c) => c + 1);
       setCommentDraft('');
+      notifyNewComment({
+        postId: post.id,
+        postSlug: post.slug,
+        commentId: created.id,
+        postAuthorId: post.author.id,
+        actorId: user.id,
+        token,
+        isReply: false,
+      });
     } catch (err: unknown) {
       setCommentError(
         err instanceof Error && err.message
@@ -311,10 +362,81 @@ function PostPage() {
     }
   };
 
-  const paragraphs = content
-    .split('\n')
-    .map((paragraph) => paragraph.trim())
-    .filter((paragraph) => paragraph.length > 0);
+  const openReply = (parent: PostComment) => {
+    if (!user) {
+      requireAuth();
+      return;
+    }
+    setEditingCommentId(null);
+    setReplyTo(parent.id);
+    setReplyDraft('');
+    setReplyError('');
+  };
+
+  const handleReplySubmit = async (e: React.FormEvent, parent: PostComment) => {
+    e.preventDefault();
+    if (!user) {
+      requireAuth();
+      return;
+    }
+    if (replyPosting) return;
+    setReplyPosting(true);
+    setReplyError('');
+
+    try {
+      const token = await getSupabaseToken();
+      const created = await addComment(post.id, user.id, replyDraft, token, parent.id);
+      setComments((prev) => [...prev, created]);
+      setCommentsCount((c) => c + 1);
+      setReplyDraft('');
+      setReplyTo(null);
+      notifyNewComment({
+        postId: post.id,
+        postSlug: post.slug,
+        commentId: created.id,
+        postAuthorId: post.author.id,
+        parentAuthorId: parent.author.id,
+        actorId: user.id,
+        token,
+        isReply: true,
+      });
+    } catch (err: unknown) {
+      setReplyError(
+        err instanceof Error && err.message
+          ? err.message
+          : 'ما قدرنا ننشر الرد، حاول مرة ثانية.'
+      );
+    } finally {
+      setReplyPosting(false);
+    }
+  };
+
+  const openEdit = (comment: PostComment) => {
+    setReplyTo(null);
+    setEditingCommentId(comment.id);
+    setEditDraft(comment.content);
+  };
+
+  const handleEditSave = async (comment: PostComment) => {
+    if (!user || editSaving) return;
+    setEditSaving(true);
+    try {
+      const token = await getSupabaseToken();
+      const updated = await updateComment(comment.id, user.id, editDraft, token);
+      setComments((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
+      setEditingCommentId(null);
+    } catch (err: unknown) {
+      setCommentError(
+        err instanceof Error && err.message
+          ? err.message
+          : 'ما قدرنا نحفظ التعديل، حاول مرة ثانية.'
+      );
+    } finally {
+      setEditSaving(false);
+    }
+  };
+
+
 
   return (
     <main className="post-page" id="main-content">
@@ -395,11 +517,23 @@ function PostPage() {
             </div>
           </header>
 
-          <div className="post-page__body">
-            {paragraphs.map((paragraph, index) => (
-              <p key={index}>{paragraph}</p>
-            ))}
-          </div>
+          {post.coverImageUrl && coverOk && (
+            <figure className="post-page__cover">
+              <img
+                src={post.coverImageUrl}
+                alt=""
+                loading="lazy"
+                onError={() => setCoverOk(false)}
+              />
+            </figure>
+          )}
+
+          <div
+            className="post-page__body"
+            // Sanitized by renderMarkdown (marked + DOMPurify) — no raw HTML
+            // from the database ever reaches the DOM unsanitized.
+            dangerouslySetInnerHTML={{ __html: bodyHtml }}
+          />
 
           <footer className="post-page__footer">
             <div className="post-page__actions" role="group" aria-label="التفاعل مع المقال">
@@ -541,13 +675,13 @@ function PostPage() {
                 <span className="post-page__spinner" aria-hidden="true" />
                 نحمّل التعليقات...
               </div>
-            ) : comments.length === 0 ? (
+            ) : topComments.length === 0 ? (
               <div className="post-page__empty">
                 <BubbleChatIcon size={22} strokeWidth={1.5} />
                 <p>توه ما فيه تعليقات.<br />خلك أول واحد يبدأ النقاش.</p>
               </div>
             ) : (
-              comments.map((comment) => (
+              topComments.map((comment) => (
                 <article key={comment.id} className="post-page__comment">
                   <div
                     className="post-page__comment-avatar"
@@ -578,7 +712,186 @@ function PostPage() {
                         {formatRelativeTime(comment.createdAt)}
                       </time>
                     </div>
-                    <p className="post-page__comment-text">{comment.content}</p>
+                    {editingCommentId === comment.id ? (
+                      <div className="post-page__comment-edit">
+                        <label htmlFor={`edit-${comment.id}`} className="sr-only">
+                          عدّل تعليقك
+                        </label>
+                        <textarea
+                          id={`edit-${comment.id}`}
+                          className="post-page__comment-input post-page__comment-input--inline"
+                          rows={2}
+                          value={editDraft}
+                          onChange={(e) => setEditDraft(e.target.value)}
+                          disabled={editSaving}
+                        />
+                        <div className="post-page__comment-edit-actions">
+                          <button
+                            type="button"
+                            className="post-page__comment-link"
+                            onClick={() => setEditingCommentId(null)}
+                            disabled={editSaving}
+                          >
+                            إلغاء
+                          </button>
+                          <Button
+                            variant="primary"
+                            size="sm"
+                            type="button"
+                            disabled={editSaving || !editDraft.trim()}
+                            onClick={() => void handleEditSave(comment)}
+                          >
+                            {editSaving ? 'نحفظ...' : 'حفظ'}
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="post-page__comment-text">{comment.content}</p>
+                    )}
+                    <div className="post-page__comment-tools">
+                      <button
+                        type="button"
+                        className="post-page__comment-link"
+                        onClick={() => openReply(comment)}
+                      >
+                        رد
+                      </button>
+                      {user && user.id === comment.author.id && editingCommentId !== comment.id && (
+                        <button
+                          type="button"
+                          className="post-page__comment-link"
+                          onClick={() => openEdit(comment)}
+                        >
+                          تعديل
+                        </button>
+                      )}
+                    </div>
+
+                    {(repliesByParent.get(comment.id) ?? []).map((reply) => (
+                      <article key={reply.id} className="post-page__comment post-page__comment--reply">
+                        <div
+                          className="post-page__comment-avatar"
+                          aria-hidden="true"
+                        >
+                          {reply.author.avatarUrl ? (
+                            <img
+                              src={reply.author.avatarUrl}
+                              alt=""
+                              loading="lazy"
+                            />
+                          ) : (
+                            <span>{getInitial(reply.author.name)}</span>
+                          )}
+                        </div>
+                        <div className="post-page__comment-content">
+                          <div className="post-page__comment-meta">
+                            <Link
+                              to={getProfilePath(reply.author)}
+                              className="post-page__comment-author"
+                            >
+                              {reply.author.name}
+                            </Link>
+                            <time
+                              className="post-page__comment-date"
+                              dateTime={reply.createdAt}
+                            >
+                              {formatRelativeTime(reply.createdAt)}
+                            </time>
+                          </div>
+                          {editingCommentId === reply.id ? (
+                            <div className="post-page__comment-edit">
+                              <label htmlFor={`edit-${reply.id}`} className="sr-only">
+                                عدّل ردك
+                              </label>
+                              <textarea
+                                id={`edit-${reply.id}`}
+                                className="post-page__comment-input post-page__comment-input--inline"
+                                rows={2}
+                                value={editDraft}
+                                onChange={(e) => setEditDraft(e.target.value)}
+                                disabled={editSaving}
+                              />
+                              <div className="post-page__comment-edit-actions">
+                                <button
+                                  type="button"
+                                  className="post-page__comment-link"
+                                  onClick={() => setEditingCommentId(null)}
+                                  disabled={editSaving}
+                                >
+                                  إلغاء
+                                </button>
+                                <Button
+                                  variant="primary"
+                                  size="sm"
+                                  type="button"
+                                  disabled={editSaving || !editDraft.trim()}
+                                  onClick={() => void handleEditSave(reply)}
+                                >
+                                  {editSaving ? 'نحفظ...' : 'حفظ'}
+                                </Button>
+                              </div>
+                            </div>
+                          ) : (
+                            <p className="post-page__comment-text">{reply.content}</p>
+                          )}
+                          {user && user.id === reply.author.id && editingCommentId !== reply.id && (
+                            <div className="post-page__comment-tools">
+                              <button
+                                type="button"
+                                className="post-page__comment-link"
+                                onClick={() => openEdit(reply)}
+                              >
+                                تعديل
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </article>
+                    ))}
+
+                    {replyTo === comment.id && (
+                      <form
+                        className="post-page__reply-form"
+                        onSubmit={(e) => void handleReplySubmit(e, comment)}
+                      >
+                        {replyError && (
+                          <p className="post-page__comment-error" role="alert">
+                            {replyError}
+                          </p>
+                        )}
+                        <label htmlFor={`reply-${comment.id}`} className="sr-only">
+                          اكتب ردك
+                        </label>
+                        <textarea
+                          id={`reply-${comment.id}`}
+                          className="post-page__comment-input post-page__comment-input--inline"
+                          rows={2}
+                          placeholder={`رد على ${comment.author.name}...`}
+                          value={replyDraft}
+                          onChange={(e) => setReplyDraft(e.target.value)}
+                          disabled={replyPosting}
+                          autoFocus
+                        />
+                        <div className="post-page__comment-edit-actions">
+                          <button
+                            type="button"
+                            className="post-page__comment-link"
+                            onClick={() => setReplyTo(null)}
+                            disabled={replyPosting}
+                          >
+                            إلغاء
+                          </button>
+                          <Button
+                            variant="primary"
+                            size="sm"
+                            type="submit"
+                            disabled={replyPosting || !replyDraft.trim()}
+                          >
+                            {replyPosting ? 'ننشر الرد...' : 'نشر الرد'}
+                          </Button>
+                        </div>
+                      </form>
+                    )}
                   </div>
                 </article>
               ))

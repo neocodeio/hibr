@@ -12,6 +12,7 @@ import type { Post } from '../types';
 import PostCard from '../components/post/PostCard';
 import Button from '../components/ui/Button';
 import AvatarPreview from '../components/ui/AvatarPreview';
+import { useDocumentMeta } from '../lib/documentMeta';
 import './ProfilePage.css';
 
 interface ProfileUser {
@@ -43,6 +44,7 @@ function ProfilePage() {
 
   const [profile, setProfile] = useState<ProfileUser | null>(null);
   const [posts, setPosts] = useState<Post[]>([]);
+  const [drafts, setDrafts] = useState<Post[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [stats, setStats] = useState<PostsStats | null>(null);
@@ -51,9 +53,21 @@ function ProfilePage() {
   const [followBusy, setFollowBusy] = useState(false);
   const [isAvatarOpen, setIsAvatarOpen] = useState(false);
   const { followingIds, followsOn, toggleFollow } = useSocial();
+  useDocumentMeta(profile?.name, profile ? `مقالات ${profile.name} في حِبر.` : undefined);
 
   const handlePostDeleted = (postId: string) => {
     setPosts((prev) => prev.filter((post) => post.id !== postId));
+    setDrafts((prev) => prev.filter((post) => post.id !== postId));
+  };
+
+  const handlePostUpdated = (updated: Post) => {
+    if (updated.isPublished) {
+      setDrafts((prev) => prev.filter((post) => post.id !== updated.id));
+      setPosts((prev) => [updated, ...prev.filter((post) => post.id !== updated.id)]);
+    } else {
+      setPosts((prev) => prev.filter((post) => post.id !== updated.id));
+      setDrafts((prev) => prev.map((post) => (post.id === updated.id ? updated : post)));
+    }
   };
 
   // Live like states + counts for the author's posts (single batch query),
@@ -146,6 +160,27 @@ function ProfilePage() {
 
     loadProfile();
   }, [profileKey]);
+
+  // Own drafts (unpublished) — visible only on your own profile. RLS
+  // enforces this server-side too; the check here just avoids the query.
+  useEffect(() => {
+    if (!profile || !currentUser || profile.id !== currentUser.id) return;
+    let cancelled = false;
+    supabase
+      .from('posts')
+      .select('*, author:users!posts_author_id_fkey(*)')
+      .eq('author_id', profile.id)
+      .eq('is_published', false)
+      .order('created_at', { ascending: false })
+      .then(({ data, error }) => {
+        if (!cancelled && !error && data) {
+          setDrafts(data.map(formatDbPost));
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [profile, currentUser]);
 
   // Follower counts for the shown profile (public, cheap count queries),
   // kept fresh by a realtime subscription. NOTE: deliberately NOT keyed on
@@ -315,7 +350,13 @@ function ProfilePage() {
           {posts.length > 0 ? (
             <div className="profile-page__list">
               {posts.map((post) => (
-                <PostCard key={post.id} post={post} onDeleted={handlePostDeleted} stats={stats} />
+                <PostCard
+                  key={post.id}
+                  post={post}
+                  onDeleted={handlePostDeleted}
+                  onPostUpdated={handlePostUpdated}
+                  stats={stats}
+                />
               ))}
             </div>
           ) : (
@@ -333,6 +374,26 @@ function ProfilePage() {
             </div>
           )}
         </section>
+
+        {isOwnProfile && drafts.length > 0 && (
+          <section className="profile-page__posts" aria-label="مسوداتك">
+            <h2 className="profile-page__section-title">
+              مسوداتك
+              <span className="profile-page__count">({drafts.length})</span>
+            </h2>
+            <div className="profile-page__list">
+              {drafts.map((post) => (
+                <PostCard
+                  key={post.id}
+                  post={post}
+                  onDeleted={handlePostDeleted}
+                  onPostUpdated={handlePostUpdated}
+                  stats={stats}
+                />
+              ))}
+            </div>
+          </section>
+        )}
       </div>
 
       <AvatarPreview

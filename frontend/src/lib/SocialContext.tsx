@@ -11,18 +11,35 @@ import {
   addFollow,
   removeFollow,
 } from './social';
+import {
+  probeNotificationsTable,
+  fetchNotifications,
+  markNotificationRead,
+  markAllNotificationsRead,
+  subscribeNotificationsRealtime,
+  notifyFollowChange,
+} from './notifications';
+import type { AppNotification } from '../types';
 
 interface SocialContextValue {
   /** Saved post ids for the signed-in user. */
   bookmarkIds: Set<string>;
   /** User ids the signed-in user follows. */
   followingIds: Set<string>;
+  /** Inbox for the signed-in user (newest first). */
+  notifications: AppNotification[];
+  /** Unread inbox count. */
+  unreadCount: number;
   /** False until the bookmarks table is confirmed to exist. */
   bookmarksOn: boolean;
   /** False until the follows table is confirmed to exist. */
   followsOn: boolean;
+  /** False until the notifications table is confirmed to exist. */
+  notificationsOn: boolean;
   toggleBookmark: (postId: string) => Promise<boolean>;
   toggleFollow: (userId: string) => Promise<boolean>;
+  markNotificationRead: (id: string) => void;
+  markAllNotificationsRead: () => void;
 }
 
 const SocialContext = createContext<SocialContextValue | null>(null);
@@ -31,8 +48,23 @@ export function SocialProvider({ children }: { children: ReactNode }) {
   const { isAuthenticated, user, requireAuth, getSupabaseToken } = useAuth();
   const [bookmarkIds, setBookmarkIds] = useState<Set<string>>(new Set());
   const [followingIds, setFollowingIds] = useState<Set<string>>(new Set());
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [bookmarksOn, setBookmarksOn] = useState(false);
   const [followsOn, setFollowsOn] = useState(false);
+  const [notificationsOn, setNotificationsOn] = useState(false);
+
+  const unreadCount = notifications.filter((n) => !n.isRead).length;
+
+  const refreshNotifications = useCallback(async () => {
+    if (!isAuthenticated || !user) return;
+    try {
+      const token = await getSupabaseToken();
+      const rows = await fetchNotifications(user.id, token);
+      setNotifications(rows);
+    } catch (err) {
+      console.warn('Error refreshing notifications:', err);
+    }
+  }, [isAuthenticated, user, getSupabaseToken]);
 
   // Probe tables once — controls stay hidden until the migration has run.
   useEffect(() => {
@@ -42,6 +74,9 @@ export function SocialProvider({ children }: { children: ReactNode }) {
     });
     probeFollowsTable().then((on) => {
       if (!cancelled) setFollowsOn(on);
+    });
+    probeNotificationsTable().then((on) => {
+      if (!cancelled) setNotificationsOn(on);
     });
     return () => {
       cancelled = true;
@@ -57,13 +92,15 @@ export function SocialProvider({ children }: { children: ReactNode }) {
     (async () => {
       try {
         const token = await getSupabaseToken();
-        const [bookmarks, following] = await Promise.all([
+        const [bookmarks, following, inbox] = await Promise.all([
           fetchBookmarkIds(user.id, token),
           fetchFollowingIds(user.id, token),
+          fetchNotifications(user.id, token),
         ]);
         if (!cancelled) {
           setBookmarkIds(bookmarks);
           setFollowingIds(following);
+          setNotifications(inbox);
         }
       } catch (err) {
         console.warn('Error loading social state:', err);
@@ -73,6 +110,14 @@ export function SocialProvider({ children }: { children: ReactNode }) {
       cancelled = true;
     };
   }, [isAuthenticated, user, getSupabaseToken]);
+
+  // Live inbox: any insert/update/delete on our rows refetches.
+  useEffect(() => {
+    if (!isAuthenticated || !user || !notificationsOn) return;
+    return subscribeNotificationsRealtime(user.id, () => {
+      void refreshNotifications();
+    });
+  }, [isAuthenticated, user, notificationsOn, refreshNotifications]);
 
   const toggleBookmark = useCallback(
     async (postId: string): Promise<boolean> => {
@@ -124,6 +169,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
         const token = await getSupabaseToken();
         if (following) await removeFollow(targetUserId, user.id, token);
         else await addFollow(targetUserId, user.id, token);
+        notifyFollowChange(targetUserId, user.id, token, !following);
         return true;
       } catch (err) {
         console.warn('Error toggling follow:', err);
@@ -139,9 +185,46 @@ export function SocialProvider({ children }: { children: ReactNode }) {
     [isAuthenticated, user, followingIds, requireAuth, getSupabaseToken]
   );
 
+  const markOneNotificationRead = useCallback(
+    async (id: string) => {
+      setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, isRead: true } : n)));
+      if (!isAuthenticated || !user) return;
+      try {
+        const token = await getSupabaseToken();
+        await markNotificationRead(id, user.id, token);
+      } catch (err) {
+        console.warn('Error marking notification read:', err);
+      }
+    },
+    [isAuthenticated, user, getSupabaseToken]
+  );
+
+  const markAllRead = useCallback(async () => {
+    setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
+    if (!isAuthenticated || !user) return;
+    try {
+      const token = await getSupabaseToken();
+      await markAllNotificationsRead(user.id, token);
+    } catch (err) {
+      console.warn('Error marking all notifications read:', err);
+    }
+  }, [isAuthenticated, user, getSupabaseToken]);
+
   return (
     <SocialContext.Provider
-      value={{ bookmarkIds, followingIds, bookmarksOn, followsOn, toggleBookmark, toggleFollow }}
+      value={{
+        bookmarkIds,
+        followingIds,
+        notifications,
+        unreadCount,
+        bookmarksOn,
+        followsOn,
+        notificationsOn,
+        toggleBookmark,
+        toggleFollow,
+        markNotificationRead: markOneNotificationRead,
+        markAllNotificationsRead: markAllRead,
+      }}
     >
       {children}
     </SocialContext.Provider>

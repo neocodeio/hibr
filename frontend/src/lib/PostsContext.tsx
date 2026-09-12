@@ -17,6 +17,8 @@ interface PostsContextValue {
   /** Manual refetch (e.g. refresh button). */
   refresh: () => Promise<void>;
   removePost: (postId: string) => void;
+  /** Replace a cached post after an edit (no refetch). */
+  updatePost: (post: Post) => void;
 }
 
 const PostsContext = createContext<PostsContextValue | null>(null);
@@ -66,8 +68,10 @@ export function PostsProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // New posts created anywhere (global composer) prepend without refetch.
+  // Drafts stay out of the feed cache — they live on the author's profile.
   useEffect(() => {
     return subscribePostCreated((newPost) => {
+      if (newPost.isPublished === false) return;
       setPosts((prev) =>
         prev.some((post) => post.id === newPost.id) ? prev : [newPost, ...prev]
       );
@@ -76,6 +80,10 @@ export function PostsProvider({ children }: { children: ReactNode }) {
 
   const removePost = useCallback((postId: string) => {
     setPosts((prev) => prev.filter((post) => post.id !== postId));
+  }, []);
+
+  const updatePost = useCallback((post: Post) => {
+    setPosts((prev) => prev.map((p) => (p.id === post.id ? post : p)));
   }, []);
 
   // Live like/comment counts for visible posts, kept fresh by realtime.
@@ -102,7 +110,7 @@ export function PostsProvider({ children }: { children: ReactNode }) {
 
   return (
     <PostsContext.Provider
-      value={{ posts, stats, isLoading, hasLoaded, refresh, removePost }}
+      value={{ posts, stats, isLoading, hasLoaded, refresh, removePost, updatePost }}
     >
       {children}
     </PostsContext.Provider>

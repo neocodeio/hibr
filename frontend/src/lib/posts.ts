@@ -14,6 +14,8 @@ export interface DbPostRow {
   comments_count?: number | null;
   author_id?: string | null;
   tags?: unknown;
+  is_published?: boolean | null;
+  cover_image_url?: string | null;
   author?: {
     id?: string | null;
     name?: string | null;
@@ -35,6 +37,21 @@ export interface CreatePostPayload {
   excerpt: string;
   content: string;
   tags?: string[];
+  coverImageUrl?: string;
+  isPublished?: boolean;
+}
+
+export function normalizeCoverUrl(raw: unknown): string | undefined {
+  if (typeof raw !== 'string') return undefined;
+  const url = raw.trim();
+  if (!url) return undefined;
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return undefined;
+  } catch {
+    return undefined;
+  }
+  return url.slice(0, 2048);
 }
 
 /**
@@ -123,19 +140,23 @@ export function parseTagsInput(value: string): string[] {
 }
 
 /**
- * True when a Supabase error means "the tags column doesn't exist yet"
- * (table predates the migration or the PostgREST schema cache is stale).
- * Callers use it to retry the write without tags instead of failing.
+ * True when a Supabase error means "a column doesn't exist yet"
+ * (table predates a migration or the PostgREST schema cache is stale).
+ * Callers use it to retry the write without the optional keys instead
+ * of failing.
  */
-export function isMissingTagsColumnError(err: unknown): boolean {
+export function isMissingColumnError(err: unknown): boolean {
   if (!err || typeof err !== 'object') return false;
   const record = err as { code?: unknown; message?: unknown };
   if (record.code === 'PGRST204') return true;
   return (
-    typeof record.message === 'string' &&
-    /tags/i.test(record.message) &&
-    /column|schema/i.test(record.message)
+    typeof record.message === 'string' && /column|schema cache/i.test(record.message)
   );
+}
+
+/** @deprecated Use isMissingColumnError instead. */
+export function isMissingTagsColumnError(err: unknown): boolean {
+  return isMissingColumnError(err);
 }
 
 export function formatDbPost(item: DbPostRow): Post {
@@ -150,6 +171,9 @@ export function formatDbPost(item: DbPostRow): Post {
     likesCount: item.likes_count || 0,
     commentsCount: item.comments_count || 0,
     tags: tags.length > 0 ? tags : undefined,
+    isPublished: item.is_published !== false,
+    coverImageUrl:
+      typeof item.cover_image_url === 'string' && item.cover_image_url ? item.cover_image_url : undefined,
     author: {
       id: item.author?.id || item.author_id || '',
       name: item.author?.name || 'كاتب حِبر',
@@ -352,8 +376,25 @@ export async function createPostInSupabase(
   const readTime = calculateReadTime(payload.content);
   const now = new Date().toISOString();
   const tags = normalizeTags(payload.tags);
+  const cover = normalizeCoverUrl(payload.coverImageUrl);
+  const isPublished = payload.isPublished !== false;
 
-  const baseRecord = {
+  // Optional keys stay optional so pre-migration retries can delete them.
+  const baseRecord: {
+    author_id: string;
+    title: string;
+    slug: string;
+    excerpt: string;
+    content: string;
+    read_time: number;
+    likes_count: number;
+    comments_count: number;
+    is_published: boolean;
+    published_at: string;
+    created_at: string;
+    tags?: string[];
+    cover_image_url?: string;
+  } = {
     author_id: profile.id,
     title: payload.title.trim(),
     slug,
@@ -362,14 +403,16 @@ export async function createPostInSupabase(
     read_time: readTime,
     likes_count: 0,
     comments_count: 0,
-    is_published: true,
+    is_published: isPublished,
     published_at: now,
     created_at: now,
   };
-  // Tags ride along when the column exists; when it doesn't yet (table
-  // predates the migration), the insert is retried without them below so
-  // publishing never breaks.
-  const postRecord = tags.length > 0 ? { ...baseRecord, tags } : baseRecord;
+  // Tags/cover ride along when the columns exist; when they don't yet
+  // (table predates the migration), the insert is retried without them
+  // below so publishing never breaks.
+  if (tags.length > 0) baseRecord.tags = tags;
+  if (cover) baseRecord.cover_image_url = cover;
+  const postRecord = baseRecord;
 
   const errors: string[] = [];
   let savedPost: DbPostRow | null = null;
@@ -390,11 +433,14 @@ export async function createPostInSupabase(
 
       let { data, error } = await insertRows(postRecord);
 
-      // Pre-migration tables have no tags column — retry bare so the post
-      // still saves (tags apply once the migration runs).
-      if (error && tags.length > 0 && isMissingTagsColumnError(error)) {
-        console.warn('Tags column missing, retrying post insert without tags.');
-        ({ data, error } = await insertRows(baseRecord));
+      // Pre-migration tables may lack the tags/cover columns — shed the
+      // offending keys and retry so the post still saves.
+      if (error && (tags.length > 0 || cover) && isMissingColumnError(error)) {
+        console.warn('Optional column missing, retrying post insert without tags/cover.');
+        const bareRecord = { ...postRecord };
+        delete bareRecord.tags;
+        delete bareRecord.cover_image_url;
+        ({ data, error } = await insertRows(bareRecord));
       }
 
       if (!error && data) {
@@ -428,6 +474,8 @@ export async function createPostInSupabase(
           readTime,
           authorName: profile.name,
           tags,
+          coverImageUrl: cover,
+          isPublished,
         }),
       });
 
@@ -453,4 +501,175 @@ export async function createPostInSupabase(
 
   // Both save paths failed — surface the real error instead of faking success.
   throw new Error(`ما قدرنا نحفظ المقال في قاعدة البيانات. ${errors.join(' | ')}`);
+}
+
+/**
+ * Flip publish state without touching anything else (no content needed,
+ * so publishing a draft can never clobber its body).
+ */
+export async function setPostPublished(
+  postId: string,
+  authorId: string,
+  clerkToken: string | null,
+  published: boolean
+): Promise<Post> {
+  const errors: string[] = [];
+
+  if (clerkToken) {
+    try {
+      const client = getSupabaseClient(clerkToken);
+      const { data, error } = await client
+        .from('posts')
+        .update({ is_published: published, updated_at: new Date().toISOString() })
+        .eq('id', postId)
+        .eq('author_id', authorId)
+        .select('*, author:users!posts_author_id_fkey(*)')
+        .single();
+      if (!error && data) return formatDbPost(data as DbPostRow);
+      if (error) {
+        console.error('Client Supabase publish toggle failed:', error.message);
+        errors.push(`Supabase: ${error.message}`);
+      }
+    } catch (err) {
+      console.error('Supabase client publish toggle error:', err);
+      errors.push(`Supabase: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  } else {
+    errors.push(
+      'Supabase: no Clerk JWT — configure the "supabase" JWT template in Clerk'
+    );
+  }
+
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/posts/${postId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ authorId, isPublished: published }),
+    });
+    const json = await res.json().catch(() => null);
+    if (res.ok && json?.success && json?.post) {
+      return formatDbPost(json.post);
+    }
+    const message = json?.error || `HTTP ${res.status}`;
+    console.error('Backend API post publish toggle failed:', message);
+    errors.push(`Backend: ${message}`);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error('Backend API post publish toggle error:', err);
+    errors.push(`Backend: ${message}`);
+  }
+
+  throw new Error(`ما قدرنا ننشر المقال. ${errors.join(' | ')}`);
+}
+
+export interface UpdatePostPatch {
+  title: string;
+  excerpt: string;
+  content: string;
+  tags: string[];
+  coverImageUrl?: string;
+  isPublished: boolean;
+}
+
+/**
+ * Update a post the viewer owns. Empty tags/cover explicitly clear the
+ * stored values; pre-migration tables retry without the optional keys.
+ */
+export async function updatePostInSupabase(
+  postId: string,
+  authorId: string,
+  clerkToken: string | null,
+  patch: UpdatePostPatch
+): Promise<Post> {
+  const title = patch.title.trim();
+  const content = patch.content.trim();
+  if (!title) throw new Error('حط عنوان للمقال أول');
+  if (!content) throw new Error('اكتب محتوى المقال أول');
+
+  const tags = normalizeTags(patch.tags);
+  const cover = normalizeCoverUrl(patch.coverImageUrl);
+  const fullPatch: {
+    title: string;
+    excerpt: string;
+    content: string;
+    read_time: number;
+    is_published: boolean;
+    updated_at: string;
+    tags?: string[];
+    cover_image_url?: string | null;
+  } = {
+    title,
+    excerpt: patch.excerpt.trim() || content.slice(0, 160) + '...',
+    content,
+    read_time: calculateReadTime(content),
+    is_published: patch.isPublished,
+    tags,
+    cover_image_url: cover ?? null,
+    updated_at: new Date().toISOString(),
+  };
+
+  const errors: string[] = [];
+
+  if (clerkToken) {
+    try {
+      const client = getSupabaseClient(clerkToken);
+      const runUpdate = (row: typeof fullPatch) =>
+        client
+          .from('posts')
+          .update(row)
+          .eq('id', postId)
+          .eq('author_id', authorId)
+          .select('*, author:users!posts_author_id_fkey(*)')
+          .single();
+
+      let { data, error } = await runUpdate(fullPatch);
+      if (error && isMissingColumnError(error)) {
+        const barePatch = { ...fullPatch };
+        delete barePatch.tags;
+        delete barePatch.cover_image_url;
+        ({ data, error } = await runUpdate(barePatch));
+      }
+      if (!error && data) return formatDbPost(data as DbPostRow);
+      if (error) {
+        console.error('Client Supabase update failed:', error.message);
+        errors.push(`Supabase: ${error.message}`);
+      }
+    } catch (err) {
+      console.error('Supabase client update error:', err);
+      errors.push(`Supabase: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  } else {
+    errors.push(
+      'Supabase: no Clerk JWT — configure the "supabase" JWT template in Clerk'
+    );
+  }
+
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/posts/${postId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        authorId,
+        title,
+        excerpt: patch.excerpt,
+        content,
+        tags,
+        coverImageUrl: cover,
+        isPublished: patch.isPublished,
+      }),
+    });
+    const json = await res.json().catch(() => null);
+    if (res.ok && json?.success && json?.post) {
+      return formatDbPost(json.post);
+    }
+    const message = json?.error || `HTTP ${res.status}`;
+    console.error('Backend API post update failed:', message);
+    errors.push(`Backend: ${message}`);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error('Backend API post update error:', err);
+    errors.push(`Backend: ${message}`);
+  }
+
+  throw new Error(`ما قدرنا نحفظ التعديلات. ${errors.join(' | ')}`);
 }

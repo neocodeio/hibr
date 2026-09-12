@@ -4,6 +4,7 @@ import PostCard from '../components/post/PostCard';
 import { usePosts } from '../lib/PostsContext';
 import { useAuth } from '../lib/AuthContext';
 import { useSocial } from '../lib/SocialContext';
+import { useDocumentMeta } from '../lib/documentMeta';
 import './FeedPage.css';
 
 type FeedTab = 'all' | 'following';
@@ -19,6 +20,7 @@ function FeedPage() {
   // Posts are cached app-wide (PostsProvider loads once). Returning to the
   // feed never refetches — it renders the cached list instantly.
   const { posts, stats, isLoading, hasLoaded, removePost } = usePosts();
+  useDocumentMeta();
   const { isAuthenticated } = useAuth();
   const { followingIds, followsOn } = useSocial();
   const [searchParams, setSearchParams] = useSearchParams();

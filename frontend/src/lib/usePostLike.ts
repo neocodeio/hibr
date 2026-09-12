@@ -21,8 +21,11 @@ export function usePostLike(
     if (nextCount !== undefined) setLikesCount(nextCount);
   }, []);
 
-  const toggle = useCallback(async (): Promise<boolean> => {
-    if (!userId || likeBusy) return false;
+  // Resolves to the new liked state on success, null when the toggle
+  // didn't happen (busy) or failed (rolled back) — callers use it to
+  // fire side-effects like notifications only for real changes.
+  const toggle = useCallback(async (): Promise<boolean | null> => {
+    if (!userId || likeBusy) return null;
     setLikeBusy(true);
     const prev = liked;
     setLiked(!prev);
@@ -32,12 +35,12 @@ export function usePostLike(
       const token = await getToken();
       const next = await toggleLike(postId, userId, token, prev);
       setLiked(next);
-      return true;
+      return next;
     } catch (err) {
       console.error('Error toggling like:', err);
       setLiked(prev);
       setLikesCount((c) => Math.max(0, c + (prev ? 1 : -1)));
-      return false;
+      return null;
     } finally {
       setLikeBusy(false);
     }

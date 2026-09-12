@@ -164,6 +164,22 @@ a.post-card__author-row:focus-visible {
   text-wrap: pretty;
 }
 
+.post-card__draft-badge {
+  display: inline-block;
+  vertical-align: middle;
+  font-family: var(--font-base);
+  font-size: 11px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-muted);
+  background-color: var(--color-surface);
+  border: 1px dashed var(--color-subtle);
+  border-radius: var(--radius-full);
+  padding: 1px 8px;
+  line-height: 1.5;
+  margin-inline-end: var(--space-2);
+  white-space: nowrap;
+}
+
 /* ── Excerpt ─────────────────────────────────────────────────── */
 .post-card__excerpt {
   font-size: 0.9375rem;

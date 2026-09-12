@@ -12,9 +12,11 @@ import {
   Logout01Icon,
   Search01Icon,
   Cancel01Icon,
+  Notification01Icon,
 } from 'hugeicons-react';
 import { useTheme } from '../../lib/ThemeProvider';
 import { useAuth } from '../../lib/AuthContext';
+import { useSocial } from '../../lib/SocialContext';
 import './Navbar.css';
 
 function Navbar() {
@@ -27,6 +29,7 @@ function Navbar() {
     signOut,
   } = useAuth();
   const { openUserProfile } = useClerk();
+  const { unreadCount, notificationsOn } = useSocial();
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -113,18 +116,21 @@ function Navbar() {
   return (
     <header className="navbar" role="banner">
       <div className="navbar__inner">
-        <div className="navbar__logo">
-          <Link to="/" aria-label="الرئيسية">
-            <Logo />
-          </Link>
-        </div>
+        <div className="navbar__start">
+          <div className="navbar__logo">
+            <Link to="/" aria-label="الرئيسية">
+              <Logo />
+            </Link>
+          </div>
 
-        <nav className="navbar__nav" aria-label="التنقل الرئيسي">
-          <Link to="/" className="navbar__link">المقالات</Link>
-          {/* {isAuthenticated && (
-            <Link to="/saved" className="navbar__link">المحفوظ</Link> KEEP IT LIKE THIS!
-          )} */}
-        </nav>
+          <nav className="navbar__nav" aria-label="التنقل الرئيسي">
+            <Link to="/" className="navbar__link">المقالات</Link>
+            <Link to="/trending" className="navbar__link">الرائج</Link>
+            {/* {isAuthenticated && (
+              <Link to="/saved" className="navbar__link">المحفوظ</Link> KEEP IT LIKE THIS!
+            )} */}
+          </nav>
+        </div>
 
         <div className="navbar__actions">
           <div className={`navbar__search${searchOpen ? ' navbar__search--open' : ''}`} role="search">
@@ -169,6 +175,21 @@ function Navbar() {
               )}
             </form>
           </div>
+
+          {isAuthenticated && notificationsOn && (
+            <Link
+              to="/notifications"
+              className="navbar__bell"
+              aria-label={unreadCount > 0 ? `الإشعارات — ${unreadCount} غير مقروء` : 'الإشعارات'}
+            >
+              <Notification01Icon size={18} strokeWidth={1.75} />
+              {unreadCount > 0 && (
+                <span className="navbar__bell-badge" aria-hidden="true">
+                  {unreadCount > 9 ? '9+' : unreadCount}
+                </span>
+              )}
+            </Link>
+          )}
 
           <button
             type="button"

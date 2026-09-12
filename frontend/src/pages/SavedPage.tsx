@@ -5,10 +5,12 @@ import { usePosts } from '../lib/PostsContext';
 import { useSocial } from '../lib/SocialContext';
 import PostCard from '../components/post/PostCard';
 import Button from '../components/ui/Button';
+import { useDocumentMeta } from '../lib/documentMeta';
 import './SavedPage.css';
 
 function SavedPage() {
   const { isAuthenticated, openSignInModal } = useAuth();
+  useDocumentMeta('المحفوظ', 'المقالات اللي حفظتها في حِبر.');
   const { posts, stats, isLoading, hasLoaded, removePost } = usePosts();
   const { bookmarkIds, bookmarksOn } = useSocial();
 

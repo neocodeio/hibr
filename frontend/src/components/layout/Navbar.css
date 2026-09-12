@@ -14,11 +14,19 @@
   max-width: 1152px;
   margin: 0 auto;
   padding: 0 var(--space-6);
-  height: 56px;
+  height: 64px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-6);
+}
+
+/* Right group: logo + nav links next to it */
+.navbar__start {
+  display: flex;
+  align-items: center;
+  gap: var(--space-5);
+  min-width: 0;
 }
 
 /* Logo */
@@ -177,6 +185,56 @@
   outline-offset: 2px;
 }
 
+/* ── Notifications bell ───────────────────────────────────── */
+.navbar__bell {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  color: var(--color-subtle);
+  flex-shrink: 0;
+  transition: color 0.12s ease, background-color 0.12s ease;
+}
+
+.navbar__bell:hover {
+  color: var(--color-ink);
+  background-color: var(--color-hover);
+  text-decoration: none;
+}
+
+.navbar__bell:focus-visible {
+  outline: 2px solid var(--color-ink);
+  outline-offset: 2px;
+}
+
+.navbar__bell svg {
+  display: block;
+}
+
+.navbar__bell-badge {
+  position: absolute;
+  top: 1px;
+  inset-inline-end: 0;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: var(--font-weight-semibold);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: #fff;
+  background-color: #e11d48;
+  border-radius: var(--radius-full);
+  border: 2px solid var(--color-white);
+  pointer-events: none;
+}
+
 /* ── Account dropdown ─────────────────────────────────────── */
 .navbar__profile {
   position: relative;
@@ -319,7 +377,7 @@
 /* Mobile */
 @media (max-width: 640px) {
   .navbar__inner {
-    height: 52px;
+    height: 60px;
     padding: 0 var(--space-4);
     gap: var(--space-3);
   }

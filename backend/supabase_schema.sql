@@ -187,3 +187,51 @@ CREATE POLICY "Users can delete their own follows"
 
 CREATE INDEX IF NOT EXISTS follows_follower_id_idx ON public.follows (follower_id);
 CREATE INDEX IF NOT EXISTS follows_following_id_idx ON public.follows (following_id);
+
+-- 6. Comment replies + editing, post covers, notifications (run in the SQL
+-- editor on existing databases; safe to re-run).
+ALTER TABLE public.comments ADD COLUMN IF NOT EXISTS parent_id UUID REFERENCES public.comments(id) ON DELETE CASCADE;
+ALTER TABLE public.posts ADD COLUMN IF NOT EXISTS cover_image_url TEXT;
+
+DROP POLICY IF EXISTS "Authors can update their own comments" ON public.comments;
+CREATE POLICY "Authors can update their own comments"
+  ON public.comments FOR UPDATE
+  USING (user_id = (auth.jwt() ->> 'sub'))
+  WITH CHECK (user_id = (auth.jwt() ->> 'sub'));
+
+CREATE TABLE IF NOT EXISTS public.notifications (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  recipient_id TEXT NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  actor_id TEXT NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  type TEXT NOT NULL CHECK (type IN ('like', 'comment', 'reply', 'follow')),
+  post_id UUID REFERENCES public.posts(id) ON DELETE CASCADE,
+  post_slug TEXT,
+  comment_id UUID REFERENCES public.comments(id) ON DELETE CASCADE,
+  is_read BOOLEAN NOT NULL DEFAULT false,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Users can view their own notifications" ON public.notifications;
+CREATE POLICY "Users can view their own notifications"
+  ON public.notifications FOR SELECT
+  USING (recipient_id = (auth.jwt() ->> 'sub'));
+
+DROP POLICY IF EXISTS "Users can insert their own notifications" ON public.notifications;
+CREATE POLICY "Users can insert their own notifications"
+  ON public.notifications FOR INSERT
+  WITH CHECK (actor_id = (auth.jwt() ->> 'sub'));
+
+DROP POLICY IF EXISTS "Users can update their own notifications" ON public.notifications;
+CREATE POLICY "Users can update their own notifications"
+  ON public.notifications FOR UPDATE
+  USING (recipient_id = (auth.jwt() ->> 'sub'))
+  WITH CHECK (recipient_id = (auth.jwt() ->> 'sub'));
+
+DROP POLICY IF EXISTS "Users can delete their own notifications" ON public.notifications;
+CREATE POLICY "Users can delete their own notifications"
+  ON public.notifications FOR DELETE
+  USING (recipient_id = (auth.jwt() ->> 'sub'));
+
+CREATE INDEX IF NOT EXISTS notifications_recipient_id_idx ON public.notifications (recipient_id, created_at DESC);

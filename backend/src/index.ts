@@ -298,6 +298,64 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', service: 'Hibr Backend API', version: '1.0.0' });
 });
 
+// Dynamic sitemap for crawlers (the frontend is a client-rendered SPA).
+// Served here because only the API can list published posts. Submit this
+// URL in Search Console, or proxy hibr.space/sitemap.xml to it.
+const SITE_URL = (process.env.SITE_URL || 'https://hibr.space').replace(/\/+$/, '');
+let sitemapCache: { xml: string; at: number } | null = null;
+const SITEMAP_TTL_MS = 60 * 60 * 1000;
+
+function escapeXml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+app.get('/sitemap.xml', asyncHandler(async (_req, res) => {
+  if (sitemapCache && Date.now() - sitemapCache.at < SITEMAP_TTL_MS) {
+    res.type('application/xml').send(sitemapCache.xml);
+    return;
+  }
+
+  const urls: { loc: string; lastmod?: string }[] = [
+    { loc: `${SITE_URL}/` },
+    { loc: `${SITE_URL}/trending` },
+  ];
+
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('posts')
+      .select('slug, updated_at, created_at')
+      .eq('is_published', true)
+      .order('created_at', { ascending: false })
+      .limit(5000);
+    if (!error && data) {
+      for (const row of data as { slug: string; updated_at?: string | null; created_at?: string | null }[]) {
+        if (typeof row.slug !== 'string' || !row.slug) continue;
+        urls.push({
+          loc: `${SITE_URL}/post/${encodeURIComponent(row.slug)}`,
+          lastmod: row.updated_at || row.created_at || undefined,
+        });
+      }
+    }
+  } catch (err) {
+    console.error('❌ Sitemap posts query failed:', err);
+  }
+
+  const body = urls
+    .map(
+      (u) =>
+        `  <url><loc>${escapeXml(u.loc)}</loc>${u.lastmod ? `<lastmod>${escapeXml(u.lastmod)}</lastmod>` : ''}</url>`
+    )
+    .join('\n');
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${body}\n</urlset>`;
+  sitemapCache = { xml, at: Date.now() };
+  res.type('application/xml').send(xml);
+}));
+
 // Manual profile sync endpoint
 app.post('/api/users/sync', writeLimiter, asyncHandler(async (req, res) => {
   const { id, email, name, avatarUrl } = req.body ?? {};
@@ -350,7 +408,7 @@ app.get('/api/posts', asyncHandler(async (req, res) => {
 
 // Create a new post endpoint
 app.post('/api/posts', writeLimiter, asyncHandler(async (req, res) => {
-  const { authorId, title, slug, excerpt, content, readTime, authorName, tags } = req.body ?? {};
+  const { authorId, title, slug, excerpt, content, readTime, authorName, tags, coverImageUrl, isPublished } = req.body ?? {};
 
   if (!isNonEmptyString(authorId, MAX_ID_LENGTH) || !isNonEmptyString(title, MAX_TITLE_LENGTH) || !isNonEmptyString(content, MAX_CONTENT_LENGTH)) {
     return res.status(400).json({ error: 'Missing required post fields' });
@@ -390,6 +448,14 @@ app.post('/api/posts', writeLimiter, asyncHandler(async (req, res) => {
   if (Number.isNaN(readTimeMinutes)) {
     return res.status(400).json({ error: 'Invalid post fields' });
   }
+  let cover: string | undefined;
+  if (coverImageUrl !== undefined) {
+    if (typeof coverImageUrl !== 'string' || (coverImageUrl !== '' && !isHttpUrl(coverImageUrl))) {
+      return res.status(400).json({ error: 'Invalid post fields' });
+    }
+    cover = coverImageUrl;
+  }
+  const published = isPublished === false ? false : true;
 
   // Guarantee author exists in public.users table
   const { data: existingUser } = await supabaseAdmin
@@ -420,23 +486,31 @@ app.post('/api/posts', writeLimiter, asyncHandler(async (req, res) => {
     read_time: readTimeMinutes,
     likes_count: 0,
     comments_count: 0,
-    is_published: true,
+    is_published: published,
     published_at: now,
     created_at: now,
+    ...(cover ? { cover_image_url: cover } : {}),
   };
-  const insertRow = (withTags: boolean) =>
+  const { cover_image_url: _cover, ...bareRow } = baseRow;
+  const insertRow = (withOptional: boolean) =>
     supabaseAdmin
       .from('posts')
-      .insert([withTags && cleanTags.length > 0 ? { ...baseRow, tags: cleanTags } : baseRow])
+      .insert([
+        withOptional
+          ? cleanTags.length > 0
+            ? { ...baseRow, tags: cleanTags }
+            : baseRow
+          : bareRow,
+      ])
       .select('*, author:users!posts_author_id_fkey(*)')
       .single();
 
   let { data, error } = await insertRow(true);
 
-  // Pre-migration tables have no tags column — retry bare so the post
-  // still saves (tags apply once the migration runs).
-  if (error && cleanTags.length > 0 && isMissingColumnError(error, 'tags')) {
-    console.warn('Tags column missing, retrying post insert without tags.');
+  // Pre-migration tables may lack the tags/cover columns — retry bare so
+  // the post still saves (they apply once the migration runs).
+  if (error && (cleanTags.length > 0 || cover) && isMissingColumnError(error, 'tags')) {
+    console.warn('Optional column missing, retrying post insert without tags/cover.');
     ({ data, error } = await insertRow(false));
   }
 
@@ -445,6 +519,113 @@ app.post('/api/posts', writeLimiter, asyncHandler(async (req, res) => {
   }
 
   console.log(`✅ Post "${title}" created successfully in Supabase!`);
+  res.json({ success: true, post: data });
+}));
+
+// Update a post endpoint (ownership always verified against the stored author)
+app.patch('/api/posts/:id', writeLimiter, asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { authorId, title, excerpt, content, tags, coverImageUrl, isPublished } = req.body ?? {};
+
+  if (!id) {
+    return res.status(400).json({ error: 'Missing post id' });
+  }
+  if (typeof authorId !== 'string' || authorId.length === 0 || authorId.length > MAX_ID_LENGTH) {
+    return res.status(403).json({ error: 'Not the post author' });
+  }
+  // Full edits require title+content; publish-only toggles may omit them.
+  const isFullEdit = title !== undefined || content !== undefined || excerpt !== undefined;
+  if (isFullEdit) {
+    if (!isNonEmptyString(title, MAX_TITLE_LENGTH) || !isNonEmptyString(content, MAX_CONTENT_LENGTH)) {
+      return res.status(400).json({ error: 'Missing required post fields' });
+    }
+    if (excerpt !== undefined && (typeof excerpt !== 'string' || excerpt.length > MAX_EXCERPT_LENGTH)) {
+      return res.status(400).json({ error: 'Invalid post fields' });
+    }
+  }
+
+  let cleanTags: string[] | undefined;
+  if (tags !== undefined) {
+    if (!Array.isArray(tags)) {
+      return res.status(400).json({ error: 'Invalid post fields' });
+    }
+    cleanTags = [];
+    const seen = new Set<string>();
+    for (const item of tags) {
+      if (typeof item !== 'string') {
+        return res.status(400).json({ error: 'Invalid post fields' });
+      }
+      const tag = item.trim().slice(0, 30);
+      if (!tag) continue;
+      const key = tag.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      cleanTags.push(tag);
+      if (cleanTags.length >= 5) break;
+    }
+  }
+
+  let cover: string | null | undefined;
+  if (coverImageUrl !== undefined) {
+    if (typeof coverImageUrl !== 'string' || (coverImageUrl !== '' && !isHttpUrl(coverImageUrl))) {
+      return res.status(400).json({ error: 'Invalid post fields' });
+    }
+    cover = coverImageUrl === '' ? null : coverImageUrl;
+  }
+
+  const { data: existing, error: fetchError } = await supabaseAdmin
+    .from('posts')
+    .select('id, author_id')
+    .eq('id', id)
+    .single();
+
+  if (fetchError || !existing) {
+    return res.status(404).json({ error: 'Post not found' });
+  }
+  if (existing.author_id !== authorId) {
+    return res.status(403).json({ error: 'Not the post author' });
+  }
+
+  const basePatch: Record<string, unknown> = {
+    updated_at: new Date().toISOString(),
+  };
+  if (isFullEdit && typeof title === 'string' && typeof content === 'string') {
+    const trimmedContent = content.trim();
+    basePatch.title = title.trim();
+    basePatch.excerpt =
+      (typeof excerpt === 'string' && excerpt.trim()) || trimmedContent.slice(0, 160) + '...';
+    basePatch.content = trimmedContent;
+    basePatch.read_time = Math.max(1, Math.ceil(trimmedContent.split(/\s+/).length / 200));
+  }
+  if (isPublished !== undefined) basePatch.is_published = isPublished === true;
+  if (cleanTags !== undefined) basePatch.tags = cleanTags;
+  if (cover !== undefined) basePatch.cover_image_url = cover;
+
+  const updateRow = (stripOptional: boolean) => {
+    const row = { ...basePatch };
+    if (stripOptional) {
+      delete row.tags;
+      delete row.cover_image_url;
+    }
+    return supabaseAdmin
+      .from('posts')
+      .update(row)
+      .eq('id', id)
+      .select('*, author:users!posts_author_id_fkey(*)')
+      .single();
+  };
+
+  let { data, error } = await updateRow(false);
+  if (error && isMissingColumnError(error, 'tags')) {
+    console.warn('Optional column missing, retrying post update without tags/cover.');
+    ({ data, error } = await updateRow(true));
+  }
+
+  if (error) {
+    return serverError(res, error, 'Could not update post');
+  }
+
+  console.log(`✏️ Post "${id}" updated successfully in Supabase!`);
   res.json({ success: true, post: data });
 }));
 

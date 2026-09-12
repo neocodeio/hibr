@@ -271,27 +271,171 @@ a.post-page__author:focus-visible {
   display: block;
 }
 
-/* ── Body ────────────────────────────────────────────────── */
+/* ── Cover ───────────────────────────────────────────────── */
+.post-page__cover {
+  margin: 0 0 var(--space-8);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+}
+
+.post-page__cover img {
+  width: 100%;
+  max-height: 380px;
+  object-fit: cover;
+  display: block;
+  background-color: var(--color-surface);
+}
+
+/* ── Body (sanitized Markdown) ─────────────────────────────── */
 .post-page__body {
   padding-top: var(--space-8);
   margin-bottom: var(--space-10);
-}
-
-.post-page__body p {
   color: var(--color-ink);
   font-size: 1.125rem;
   line-height: 2;
   overflow-wrap: break-word;
   text-wrap: pretty;
+}
+
+.post-page__cover + .post-page__body {
+  padding-top: 0;
+}
+
+.post-page__body > *:first-child {
+  margin-top: 0;
+}
+
+.post-page__body > *:last-child {
+  margin-bottom: 0;
+}
+
+.post-page__body p {
   margin-bottom: var(--space-6);
 }
 
-.post-page__body p:first-child {
+.post-page__body h2,
+.post-page__body h3,
+.post-page__body h4 {
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.5;
+  letter-spacing: var(--letter-spacing-tight);
+  text-wrap: balance;
+  margin: var(--space-8) 0 var(--space-4);
+}
+
+.post-page__body h2 {
+  font-size: 1.375rem;
+}
+
+.post-page__body h3 {
   font-size: 1.2rem;
 }
 
-.post-page__body p:last-child {
+.post-page__body h4 {
+  font-size: 1.0625rem;
+}
+
+.post-page__body ul,
+.post-page__body ol {
+  margin: 0 0 var(--space-6);
+  padding-inline-start: var(--space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.post-page__body ul {
+  list-style: disc;
+}
+
+.post-page__body ol {
+  list-style: decimal;
+}
+
+.post-page__body li::marker {
+  color: var(--color-subtle);
+}
+
+.post-page__body blockquote {
+  margin: 0 0 var(--space-6);
+  padding: var(--space-4) var(--space-5);
+  border-inline-start: 3px solid var(--color-border);
+  background-color: var(--color-surface);
+  border-radius: var(--radius-sm);
+  color: var(--color-muted);
+}
+
+.post-page__body blockquote p {
+  margin-bottom: var(--space-2);
+}
+
+.post-page__body blockquote p:last-child {
   margin-bottom: 0;
+}
+
+.post-page__body a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: var(--color-subtle);
+  overflow-wrap: anywhere;
+}
+
+.post-page__body a:hover {
+  text-decoration-color: var(--color-ink);
+}
+
+.post-page__body strong {
+  font-weight: var(--font-weight-semibold);
+}
+
+.post-page__body em {
+  font-style: italic;
+}
+
+.post-page__body code {
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 0.85em;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 1px 6px;
+  direction: ltr;
+  unicode-bidi: embed;
+}
+
+.post-page__body pre {
+  margin: 0 0 var(--space-6);
+  padding: var(--space-4);
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  overflow-x: auto;
+  direction: ltr;
+  text-align: left;
+}
+
+.post-page__body pre code {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 0.875rem;
+  line-height: 1.7;
+}
+
+.post-page__body img {
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  margin: var(--space-4) auto;
+}
+
+.post-page__body hr {
+  border: none;
+  border-top: var(--border);
+  margin: var(--space-8) 0;
 }
 
 /* ── Footer actions ──────────────────────────────────────── */
@@ -679,6 +823,90 @@ a.post-page__author:focus-visible {
   margin: 0;
 }
 
+/* Reply threads + inline tools */
+.post-page__comment--reply {
+  margin-top: var(--space-3);
+  padding-inline-start: var(--space-3);
+  border-inline-start: 2px solid var(--color-border);
+}
+
+.post-page__comment--reply .post-page__comment-avatar {
+  width: 30px;
+  height: 30px;
+  font-size: var(--font-size-xs);
+}
+
+.post-page__comment--reply .post-page__comment-content {
+  padding: var(--space-2) var(--space-3);
+}
+
+.post-page__comment-tools {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-top: var(--space-1);
+}
+
+.post-page__comment-link {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-subtle);
+  padding: 2px 0;
+  border-radius: var(--radius-sm);
+  transition: color 0.12s ease;
+}
+
+.post-page__comment-link:hover:not(:disabled) {
+  color: var(--color-ink);
+}
+
+.post-page__comment-link:focus-visible {
+  outline: 2px solid var(--color-ink);
+  outline-offset: 2px;
+}
+
+.post-page__comment-link:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.post-page__reply-form {
+  margin-top: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.post-page__comment-edit {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.post-page__comment-input--inline {
+  min-height: 56px;
+  font-size: var(--font-size-sm);
+  background-color: var(--color-white);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-3);
+}
+
+.post-page__comment-input--inline:focus {
+  border-color: var(--color-ink);
+}
+
+[data-theme='dark'] .post-page__comment-input--inline {
+  background-color: var(--color-surface);
+}
+
+.post-page__comment-edit-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
 /* ── Skeleton ────────────────────────────────────────────── */
 .post-page__skeleton {
   display: flex;
@@ -800,12 +1028,12 @@ a.post-page__author:focus-visible {
     margin-bottom: var(--space-6);
   }
 
-  .post-page__body p {
+  .post-page__body {
     font-size: 1.0625rem;
   }
 
-  .post-page__body p:first-child {
-    font-size: 1.125rem;
+  .post-page__cover img {
+    max-height: 280px;
   }
 }
 
@@ -844,10 +1072,26 @@ a.post-page__author:focus-visible {
     padding-top: var(--space-6);
   }
 
-  .post-page__body p,
-  .post-page__body p:first-child {
+  .post-page__body,
+  .post-page__body p {
     font-size: 1rem;
     line-height: 1.95;
+  }
+
+  .post-page__cover {
+    margin-bottom: var(--space-6);
+  }
+
+  .post-page__cover img {
+    max-height: 220px;
+  }
+
+  .post-page__body h2 {
+    font-size: 1.2rem;
+  }
+
+  .post-page__body h3 {
+    font-size: 1.1rem;
   }
 
   .post-page__actions {
