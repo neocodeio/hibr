@@ -145,3 +145,54 @@ export async function fetchFollowCounts(userId: string): Promise<{ followers: nu
       !followingRes.error && typeof followingRes.count === 'number' ? followingRes.count : 0,
   };
 }
+
+/**
+ * Realtime subscription for follow changes involving one user (as follower
+ * or as followed). Calls onChange (debounced) on any insert/delete so
+ * callers refetch absolute counts — immune to double-applied echoes.
+ *
+ * Unique topic per call: supabase-js reuses channels by topic and throws
+ * when .on() is called on an already-subscribed channel.
+ */
+export function subscribeFollowsRealtime(userId: string, onChange: () => void): () => void {
+  if (!userId) return () => {};
+
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  const debounced = () => {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(onChange, 350);
+  };
+
+  const topic = `follows-realtime-${Date.now().toString(36)}-${Math.random()
+    .toString(36)
+    .slice(2, 8)}`;
+
+  try {
+    const channel = supabase
+      .channel(topic)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'follows', filter: `following_id=eq.${userId}` },
+        debounced
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'follows', filter: `follower_id=eq.${userId}` },
+        debounced
+      )
+      .subscribe((status) => {
+        if (status !== 'SUBSCRIBED') {
+          console.warn('Realtime follows subscription status:', status);
+        }
+      });
+
+    return () => {
+      if (timer) clearTimeout(timer);
+      void supabase.removeChannel(channel);
+    };
+  } catch (err) {
+    console.warn('Realtime follows subscription failed:', err);
+    if (timer) clearTimeout(timer);
+    return () => {};
+  }
+}

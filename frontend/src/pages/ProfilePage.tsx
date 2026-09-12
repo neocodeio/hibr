@@ -7,7 +7,7 @@ import { supabase } from '../lib/supabase';
 import { formatDbPost } from '../lib/posts';
 import { fetchPostsStats, subscribePostsRealtime } from '../lib/interactions';
 import type { PostsStats } from '../lib/interactions';
-import { fetchFollowCounts } from '../lib/social';
+import { fetchFollowCounts, subscribeFollowsRealtime } from '../lib/social';
 import type { Post } from '../types';
 import PostCard from '../components/post/PostCard';
 import Button from '../components/ui/Button';
@@ -145,20 +145,30 @@ function ProfilePage() {
     loadProfile();
   }, [profileKey]);
 
-  // Follower counts for the shown profile (public, cheap count queries).
+  // Follower counts for the shown profile (public, cheap count queries),
+  // kept fresh by a realtime subscription. NOTE: deliberately NOT keyed on
+  // `followingIds` — that changes optimistically before the write commits,
+  // so refetching on it reads stale counts (the refresh-page bug). Own
+  // toggles adjust the count locally below; the subscription converges to
+  // server truth for everyone else's actions.
   useEffect(() => {
     if (!profile || !followsOn) return;
     let cancelled = false;
-    fetchFollowCounts(profile.id).then((counts) => {
-      if (!cancelled) {
-        setFollowerCount(counts.followers);
-        setFollowingCount(counts.following);
-      }
-    });
+    const refresh = () => {
+      fetchFollowCounts(profile.id).then((counts) => {
+        if (!cancelled) {
+          setFollowerCount(counts.followers);
+          setFollowingCount(counts.following);
+        }
+      });
+    };
+    refresh();
+    const unsubscribe = subscribeFollowsRealtime(profile.id, refresh);
     return () => {
       cancelled = true;
+      unsubscribe();
     };
-  }, [profile, followsOn, followingIds]);
+  }, [profile, followsOn]);
 
   if (isLoading) {
     return (
@@ -199,9 +209,13 @@ function ProfilePage() {
 
   const handleFollow = async () => {
     if (!profile || followBusy) return;
+    // Capture pre-toggle state: a successful toggle flips it, so the
+    // followers count moves instantly with no server round-trip.
+    const wasFollowing = followingIds.has(profile.id);
     setFollowBusy(true);
     try {
-      await toggleFollow(profile.id);
+      const ok = await toggleFollow(profile.id);
+      if (ok) setFollowerCount((c) => Math.max(0, c + (wasFollowing ? -1 : 1)));
     } finally {
       setFollowBusy(false);
     }
