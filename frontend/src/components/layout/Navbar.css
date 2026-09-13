@@ -374,6 +374,11 @@
   color: var(--color-muted);
 }
 
+/* ── Mobile bottom tab bar (hidden on desktop) ──────────── */
+.navbar__bottom {
+  display: none;
+}
+
 /* Mobile */
 @media (max-width: 640px) {
   .navbar__inner {
@@ -403,6 +408,176 @@
 
   .navbar__menu {
     min-width: 210px;
+  }
+}
+
+/* ── Bottom tab bar: phones + small tablets ─────────────────── */
+@media (max-width: 768px) {
+  /* Reserve space so page content is never hidden behind the bar */
+  body {
+    padding-bottom: calc(68px + env(safe-area-inset-bottom, 0px));
+  }
+
+  /* Top bar stays slim: nav links live in the bottom bar now */
+  .navbar__nav {
+    display: none;
+  }
+
+  /* Avoid duplication / crowding on top:
+     - write CTA lives as the center FAB at the bottom
+     - notifications bell lives as a bottom tab */
+  .navbar__user-actions .btn--primary,
+  .navbar__actions > .btn--primary,
+  .navbar__actions .navbar__bell {
+    display: none;
+  }
+
+  .navbar__inner {
+    height: 56px;
+    padding: 0 var(--space-4);
+    gap: var(--space-2);
+  }
+
+  .navbar__search--open .navbar__search-input {
+    width: min(38vw, 170px);
+  }
+
+  /* The bar itself */
+  .navbar__bottom {
+    display: flex;
+    align-items: stretch;
+    justify-content: space-around;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 100;
+    background-color: var(--color-white);
+    border-top: var(--border);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    /* Subtle separation + blur over scrolled content */
+    box-shadow: 0 -8px 24px -12px rgba(0, 0, 0, 0.15);
+  }
+
+  .navbar__tab {
+    position: relative;
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: 64px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    padding: 8px 4px 10px;
+    color: var(--color-muted);
+    text-decoration: none;
+    font-family: var(--font-base);
+    background: none;
+    border: none;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    transition: color 0.15s ease;
+  }
+
+  .navbar__tab:hover {
+    color: var(--color-ink);
+    text-decoration: none;
+  }
+
+  .navbar__tab:focus-visible {
+    outline: 2px solid var(--color-ink);
+    outline-offset: -2px;
+    border-radius: var(--radius-sm);
+  }
+
+  .navbar__tab svg {
+    display: block;
+    flex-shrink: 0;
+  }
+
+  .navbar__tab-label {
+    font-size: 11px;
+    font-weight: var(--font-weight-medium);
+    line-height: 1.2;
+    white-space: nowrap;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* Active tab: emphasized + dot indicator */
+  .navbar__tab--active {
+    color: var(--color-ink);
+  }
+
+  .navbar__tab--active::before {
+    content: '';
+    position: absolute;
+    top: 5px;
+    width: 16px;
+    height: 3px;
+    border-radius: var(--radius-full);
+    background-color: var(--color-ink);
+  }
+
+  /* Center create button */
+  .navbar__tab--create {
+    color: var(--color-muted);
+  }
+
+  .navbar__tab-fab {
+    width: 44px;
+    height: 32px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-full);
+    background-color: var(--color-ink);
+    color: var(--color-white);
+    transition: transform 0.15s ease, background-color 0.15s ease;
+  }
+
+  .navbar__tab--create:hover {
+    color: var(--color-ink);
+  }
+
+  .navbar__tab--create:hover .navbar__tab-fab {
+    background-color: var(--color-black);
+  }
+
+  .navbar__tab--create:active .navbar__tab-fab {
+    transform: scale(0.94);
+  }
+
+  /* Icon wrapper anchors the unread badge */
+  .navbar__tab-iconwrap {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 0;
+  }
+
+  .navbar__tab-badge {
+    position: absolute;
+    top: -6px;
+    inset-inline-end: -10px;
+    min-width: 17px;
+    height: 17px;
+    padding: 0 4px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: var(--font-weight-semibold);
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+    color: #fff;
+    background-color: #e11d48;
+    border-radius: var(--radius-full);
+    border: 2px solid var(--color-white);
+    pointer-events: none;
   }
 }
 

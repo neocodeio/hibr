@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Link, useNavigate, useLocation, useSearchParams } from 'react-router-dom';
+import { Link, NavLink, useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useClerk } from '@clerk/clerk-react';
 import Logo from '../ui/Logo';
 import Button from '../ui/Button';
@@ -13,6 +13,9 @@ import {
   Search01Icon,
   Cancel01Icon,
   Notification01Icon,
+  Home01Icon,
+  Fire02Icon,
+  PlusSignIcon,
 } from 'hugeicons-react';
 import { useTheme } from '../../lib/ThemeProvider';
 import { useAuth } from '../../lib/AuthContext';
@@ -114,6 +117,7 @@ function Navbar() {
   };
 
   return (
+    <>
     <header className="navbar" role="banner">
       <div className="navbar__inner">
         <div className="navbar__start">
@@ -314,6 +318,78 @@ function Navbar() {
         </div>
       </div>
     </header>
+
+    {/* ── Mobile bottom tab bar (visible ≤ 768px via CSS) ── */}
+    <nav className="navbar__bottom" aria-label="التنقل السفلي">
+      <NavLink
+        to="/"
+        end
+        className={({ isActive }) =>
+          `navbar__tab${isActive ? ' navbar__tab--active' : ''}`
+        }
+        aria-label="المقالات"
+      >
+        <Home01Icon size={22} strokeWidth={1.75} aria-hidden="true" />
+        <span className="navbar__tab-label">المقالات</span>
+      </NavLink>
+
+      <NavLink
+        to="/trending"
+        className={({ isActive }) =>
+          `navbar__tab${isActive ? ' navbar__tab--active' : ''}`
+        }
+        aria-label="الرائج"
+      >
+        <Fire02Icon size={22} strokeWidth={1.75} aria-hidden="true" />
+        <span className="navbar__tab-label">الرائج</span>
+      </NavLink>
+
+      <button
+        type="button"
+        className="navbar__tab navbar__tab--create"
+        onClick={openCreatePostModal}
+        aria-label="ابدأ الكتابة"
+      >
+        <span className="navbar__tab-fab" aria-hidden="true">
+          <PlusSignIcon size={22} strokeWidth={2} />
+        </span>
+        <span className="navbar__tab-label">اكتب</span>
+      </button>
+
+      <NavLink
+        to="/notifications"
+        className={({ isActive }) =>
+          `navbar__tab${isActive ? ' navbar__tab--active' : ''}`
+        }
+        aria-label={
+          unreadCount > 0
+            ? `الإشعارات — ${unreadCount} غير مقروء`
+            : 'الإشعارات'
+        }
+      >
+        <span className="navbar__tab-iconwrap" aria-hidden="true">
+          <Notification01Icon size={22} strokeWidth={1.75} />
+          {isAuthenticated && unreadCount > 0 && (
+            <span className="navbar__tab-badge">
+              {unreadCount > 9 ? '9+' : unreadCount}
+            </span>
+          )}
+        </span>
+        <span className="navbar__tab-label">الإشعارات</span>
+      </NavLink>
+
+      <NavLink
+        to="/saved"
+        className={({ isActive }) =>
+          `navbar__tab${isActive ? ' navbar__tab--active' : ''}`
+        }
+        aria-label="المحفوظ"
+      >
+        <Bookmark02Icon size={22} strokeWidth={1.75} aria-hidden="true" />
+        <span className="navbar__tab-label">المحفوظ</span>
+      </NavLink>
+    </nav>
+    </>
   );
 }
 
