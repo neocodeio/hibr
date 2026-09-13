@@ -175,17 +175,45 @@ function PostPage() {
         };
         let data: PostRow | null = null;
         for (const candidate of candidates) {
-          const result = await supabase
+          // Author columns are explicit so user emails are never pulled in.
+          const full = await supabase
             .from('posts')
-            .select('*, author:users!posts_author_id_fkey(*)')
+            .select('*, author:users!posts_author_id_fkey(id,name,avatar_url,username)')
             .eq('slug', candidate)
             .maybeSingle();
-          if (result.data && !result.error) {
-            data = result.data as PostRow;
+          if (full.data && !full.error) {
+            data = full.data as PostRow;
             break;
+          }
+          if (full.error) {
+            const msg = String(
+              (full.error as { message?: unknown }).message ?? ''
+            ).toLowerCase();
+            const code = (full.error as { code?: unknown }).code;
+            // Pre-migration tables may lack `username` — retry without it.
+            if (code === 'PGRST204' || msg.includes('username')) {
+              const bare = await supabase
+                .from('posts')
+                .select('*, author:users!posts_author_id_fkey(id,name,avatar_url)')
+                .eq('slug', candidate)
+                .maybeSingle();
+              if (bare.data && !bare.error) {
+                data = bare.data as PostRow;
+                break;
+              }
+            }
           }
         }
 
+        if (data) {
+          // Defense-in-depth: drafts are only viewable by their author.
+          // RLS enforces this server-side; this gate keeps the UI from ever
+          // rendering an unpublished post to the wrong viewer.
+          const authorId = data.author?.id || data.author_id || '';
+          if (data.is_published === false && authorId !== user?.id) {
+            data = null;
+          }
+        }
         if (data) {
           const formattedPost: Post = {
             id: data.id,
@@ -229,7 +257,7 @@ function PostPage() {
     }
 
     loadPost();
-  }, [slug]);
+  }, [slug, user?.id]);
 
   // Live like state + comments once the post identity is known,
   // kept fresh by a realtime subscription (no refresh needed).

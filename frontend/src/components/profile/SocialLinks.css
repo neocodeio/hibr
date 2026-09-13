@@ -1,0 +1,54 @@
+/* ============================================================
+   SocialLinks — public chips row on profiles. RTL-first.
+   ============================================================ */
+
+.social-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.social-links__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 6px var(--space-3);
+  border: var(--border);
+  border-radius: var(--radius-full);
+  background-color: transparent;
+  color: var(--color-muted);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  text-decoration: none;
+  line-height: 1.4;
+  transition: color 0.15s ease, background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.social-links__chip:hover {
+  color: var(--color-ink);
+  background-color: var(--color-hover);
+  border-color: var(--color-subtle);
+  text-decoration: none;
+}
+
+.social-links__chip:focus-visible {
+  outline: 2px solid var(--color-ink);
+  outline-offset: 2px;
+}
+
+.social-links__chip svg {
+  display: block;
+  flex-shrink: 0;
+}
+
+.social-links__chip-label {
+  white-space: nowrap;
+}
+
+@media (max-width: 480px) {
+  .social-links {
+    justify-content: center;
+  }
+}

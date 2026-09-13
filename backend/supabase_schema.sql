@@ -25,7 +25,8 @@ CREATE POLICY "Users are viewable by everyone"
 DROP POLICY IF EXISTS "Users can update their own profile" ON public.users;
 CREATE POLICY "Users can update their own profile" 
   ON public.users FOR UPDATE 
-  USING (id = (auth.jwt() ->> 'sub'));
+  USING (id = (auth.jwt() ->> 'sub'))
+  WITH CHECK (id = (auth.jwt() ->> 'sub'));
 
 DROP POLICY IF EXISTS "Users can insert their own profile" ON public.users;
 CREATE POLICY "Users can insert their own profile" 
@@ -71,7 +72,8 @@ CREATE POLICY "Authenticated users can create posts"
 DROP POLICY IF EXISTS "Authors can update their own posts" ON public.posts;
 CREATE POLICY "Authors can update their own posts" 
   ON public.posts FOR UPDATE 
-  USING (author_id = (auth.jwt() ->> 'sub'));
+  USING (author_id = (auth.jwt() ->> 'sub'))
+  WITH CHECK (author_id = (auth.jwt() ->> 'sub'));
 
 DROP POLICY IF EXISTS "Authors can delete their own posts" ON public.posts;
 CREATE POLICY "Authors can delete their own posts" 
@@ -263,3 +265,18 @@ CREATE POLICY "Users can delete their own covers"
     bucket_id = 'post-covers'
     AND (storage.foldername(name))[1] = (auth.jwt() ->> 'sub')
   );
+
+-- 8. Profile social links (max 3: X, Instagram, Substack — enforced in
+-- the app). JSONB array like '[{"platform":"x","url":"https://..."}]'.
+-- Safe to re-run on existing databases.
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS social_links JSONB NOT NULL DEFAULT '[]';
+
+-- 9. Pretty profile URLs: Clerk username synced by the app (AuthContext +
+-- /api/users/sync). Safe to re-run; existing rows keep their values.
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS username TEXT UNIQUE;
+
+-- 10. Notifications anti-forgery: nobody can notify themselves; self-notify
+-- attempts are rejected at the database, not just in client code.
+ALTER TABLE public.notifications DROP CONSTRAINT IF EXISTS notifications_no_self_notify;
+ALTER TABLE public.notifications
+  ADD CONSTRAINT notifications_no_self_notify CHECK (recipient_id <> actor_id);

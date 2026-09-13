@@ -10,8 +10,14 @@ dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
-const NODE_ENV = process.env.NODE_ENV || 'development';
+const NODE_ENV = process.env.NODE_ENV || 'production';
 const isProd = NODE_ENV === 'production';
+
+// Behind Render (or any reverse proxy) the client IP arrives via
+// X-Forwarded-For — trust the first proxy hop so rate limiters see real
+// client IPs instead of bucketing everyone into one.
+app.set('trust proxy', 1);
+app.disable('x-powered-by');
 
 // Initialize Supabase Admin Client (Service Role Key or Anon Key)
 const supabaseUrl = process.env.SUPABASE_URL || 'https://wmfftwbgjgrafustxwxd.supabase.co';
@@ -81,6 +87,32 @@ function requireWriteClient(
   return client;
 }
 
+/**
+ * Defense-in-depth: read the `sub` claim from the caller's Bearer JWT.
+ * Signature enforcement stays with Supabase/PostgREST (RLS is the real
+ * gate); this only lets the API compare body-supplied ids against the same
+ * token RLS sees, so spoofed ids fail fast with the correct status instead
+ * of leaking distinct 403/500 oracles.
+ */
+function getTokenSub(req: express.Request): string | null {
+  const header = req.headers.authorization;
+  if (!header || !header.startsWith('Bearer ')) return null;
+  const token = header.slice('Bearer '.length).trim();
+  const parts = token.split('.');
+  if (parts.length !== 3) return null;
+  try {
+    const payload = JSON.parse(
+      Buffer.from(parts[1], 'base64url').toString('utf8')
+    ) as { sub?: unknown };
+    return typeof payload.sub === 'string' && payload.sub.length > 0 ? payload.sub : null;
+  } catch {
+    return null;
+  }
+}
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 // ── Security headers ────────────────────────────────────────────
 // crossOriginResourcePolicy must stay 'cross-origin': the frontend calls
 // this API cross-origin, and the default 'same-origin' would make browsers
@@ -118,14 +150,11 @@ app.use(
       }
       return callback(new Error('CORS origin not allowed'));
     },
-    methods: ['GET', 'POST', 'DELETE', 'OPTIONS'],
+    methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
   })
 );
 
 // ── Rate limiting ───────────────────────────────────────────────
-// NOTE: no `trust proxy` is set — enable it (e.g. app.set('trust proxy', 1))
-// only if this API actually runs behind a reverse proxy, otherwise client
-// IPs could be spoofed.
 function tooManyRequests(_req: express.Request, res: express.Response) {
   res.status(429).json({ error: 'Too many requests, please slow down.' });
 }
@@ -135,10 +164,14 @@ const globalLimiter = rateLimit({
   limit: 500,
   standardHeaders: true,
   legacyHeaders: false,
+  // Health probes (Render health checks + uptime monitors) must never be
+  // rate-limited — a 429 there looks like an unhealthy deploy.
+  skip: (req) => req.path === '/api/health',
   handler: tooManyRequests,
 });
 
-// Mutations go through the privileged service-role client — limit harder.
+// Mutations go through a per-request client bound to the caller's JWT, so
+// RLS enforces ownership per user — limit harder anyway.
 const writeLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: 100,
@@ -251,7 +284,7 @@ app.post('/api/webhooks/clerk', webhookLimiter, express.raw({ type: 'application
 
   if (!webhookSecret) {
     console.warn('⚠️ CLERK_WEBHOOK_SECRET is not set in backend/.env');
-    return res.status(500).json({ error: 'Webhook secret missing' });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 
   // Svix headers
@@ -413,6 +446,13 @@ app.post('/api/users/sync', writeLimiter, asyncHandler(async (req, res) => {
     return res.status(400).json({ error: 'Invalid user fields' });
   }
 
+  // The id being synced must be the caller's own identity — never trust the
+  // body alone (RLS would reject it anyway, but with a confusing 500).
+  const tokenSub = getTokenSub(req);
+  if (!tokenSub || tokenSub !== id) {
+    return res.status(403).json({ error: 'Not the profile owner' });
+  }
+
   const { data, error } = await db.from('users').upsert(
     {
       id,
@@ -431,19 +471,40 @@ app.post('/api/users/sync', writeLimiter, asyncHandler(async (req, res) => {
   res.json({ success: true, user: data });
 }));
 
-// Fetch all published posts
+// Public author columns — never include `email` (PII). `username` may not
+// exist on pre-migration databases, so every author join tries the full set
+// first and retries bare when PostgREST reports a missing column.
+const AUTHOR_JOIN_FULL = 'author:users!posts_author_id_fkey(id,name,avatar_url,username)';
+const AUTHOR_JOIN_BARE = 'author:users!posts_author_id_fkey(id,name,avatar_url)';
+
+// Fetch all published posts (paginated — never the whole table)
 app.get('/api/posts', asyncHandler(async (req, res) => {
-  const { data, error } = await supabaseAdmin
-    .from('posts')
-    .select('*, author:users!posts_author_id_fkey(*)')
-    .eq('is_published', true)
-    .order('created_at', { ascending: false });
+  const rawLimit = Array.isArray(req.query.limit) ? req.query.limit[0] : req.query.limit;
+  const rawOffset = Array.isArray(req.query.offset) ? req.query.offset[0] : req.query.offset;
+  const parsedLimit = typeof rawLimit === 'string' ? Number.parseInt(rawLimit, 10) : NaN;
+  const parsedOffset = typeof rawOffset === 'string' ? Number.parseInt(rawOffset, 10) : NaN;
+  const limit = Number.isInteger(parsedLimit) ? Math.min(Math.max(parsedLimit, 1), 50) : 50;
+  const offset = Number.isInteger(parsedOffset) ? Math.min(Math.max(parsedOffset, 0), 10000) : 0;
+
+  const runQuery = (authorJoin: string) =>
+    supabaseAdmin
+      .from('posts')
+      .select(`*, ${authorJoin}`, { count: 'exact' })
+      .eq('is_published', true)
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
+
+  let { data, error, count } = await runQuery(AUTHOR_JOIN_FULL);
+
+  if (error && isMissingColumnError(error, 'username')) {
+    ({ data, error, count } = await runQuery(AUTHOR_JOIN_BARE));
+  }
 
   if (error) {
     return serverError(res, error, 'Could not fetch posts');
   }
 
-  res.json({ posts: data });
+  res.json({ posts: data, total: count ?? null, limit, offset });
 }));
 
 // Create a new post endpoint (RLS-enforced via the caller's JWT:
@@ -455,6 +516,12 @@ app.post('/api/posts', writeLimiter, asyncHandler(async (req, res) => {
 
   if (!isNonEmptyString(authorId, MAX_ID_LENGTH) || !isNonEmptyString(title, MAX_TITLE_LENGTH) || !isNonEmptyString(content, MAX_CONTENT_LENGTH)) {
     return res.status(400).json({ error: 'Missing required post fields' });
+  }
+  // Posts can only be created as yourself — the token sub is the identity
+  // RLS enforces; the body id is just a (verified) echo of it.
+  const createSub = getTokenSub(req);
+  if (!createSub || createSub !== authorId) {
+    return res.status(403).json({ error: 'Not the post author' });
   }
   if (!isOptionalString(excerpt, MAX_EXCERPT_LENGTH) || !isOptionalString(authorName, MAX_NAME_LENGTH)) {
     return res.status(400).json({ error: 'Invalid post fields' });
@@ -539,7 +606,7 @@ app.post('/api/posts', writeLimiter, asyncHandler(async (req, res) => {
     ...(cover ? { cover_image_url: cover } : {}),
   };
   const { cover_image_url: _cover, ...bareRow } = baseRow;
-  const insertRow = (withOptional: boolean) =>
+  const insertRow = (withOptional: boolean, authorJoin: string) =>
     db
       .from('posts')
       .insert([
@@ -549,16 +616,22 @@ app.post('/api/posts', writeLimiter, asyncHandler(async (req, res) => {
             : baseRow
           : bareRow,
       ])
-      .select('*, author:users!posts_author_id_fkey(*)')
+      .select(`*, ${authorJoin}`)
       .single();
 
-  let { data, error } = await insertRow(true);
+  let { data, error } = await insertRow(true, AUTHOR_JOIN_FULL);
 
   // Pre-migration tables may lack the tags/cover columns — retry bare so
   // the post still saves (they apply once the migration runs).
   if (error && (cleanTags.length > 0 || cover) && isMissingColumnError(error, 'tags')) {
     console.warn('Optional column missing, retrying post insert without tags/cover.');
-    ({ data, error } = await insertRow(false));
+    ({ data, error } = await insertRow(false, AUTHOR_JOIN_FULL));
+  }
+
+  // Pre-migration `users` tables may lack `username` — retry the response
+  // select without it so creation still succeeds.
+  if (error && isMissingColumnError(error, 'username')) {
+    ({ data, error } = await insertRow(false, AUTHOR_JOIN_BARE));
   }
 
   if (error) {
@@ -574,14 +647,23 @@ app.post('/api/posts', writeLimiter, asyncHandler(async (req, res) => {
 app.patch('/api/posts/:id', writeLimiter, asyncHandler(async (req, res) => {
   const db = requireWriteClient(req, res);
   if (!db) return;
-  const { id } = req.params;
+  const rawPatchId = req.params.id;
+  const id = typeof rawPatchId === 'string' ? rawPatchId : '';
   const { authorId, title, excerpt, content, tags, coverImageUrl, isPublished } = req.body ?? {};
 
-  if (!id) {
-    return res.status(400).json({ error: 'Missing post id' });
+  if (!id || !UUID_RE.test(id)) {
+    return res.status(400).json({ error: 'Invalid post id' });
   }
   if (typeof authorId !== 'string' || authorId.length === 0 || authorId.length > MAX_ID_LENGTH) {
     return res.status(403).json({ error: 'Not the post author' });
+  }
+  // authorId must echo the caller's own identity.
+  const patchSub = getTokenSub(req);
+  if (!patchSub || patchSub !== authorId) {
+    return res.status(403).json({ error: 'Not the post author' });
+  }
+  if (isPublished !== undefined && typeof isPublished !== 'boolean') {
+    return res.status(400).json({ error: 'Invalid post fields' });
   }
   // Full edits require title+content; publish-only toggles may omit them.
   const isFullEdit = title !== undefined || content !== undefined || excerpt !== undefined;
@@ -632,8 +714,10 @@ app.patch('/api/posts/:id', writeLimiter, asyncHandler(async (req, res) => {
   if (fetchError || !existing) {
     return res.status(404).json({ error: 'Post not found' });
   }
+  // 404 (not 403) for non-owned posts: a distinct forbidden response would
+  // let attackers enumerate private/draft posts by UUID.
   if (existing.author_id !== authorId) {
-    return res.status(403).json({ error: 'Not the post author' });
+    return res.status(404).json({ error: 'Post not found' });
   }
 
   const basePatch: Record<string, unknown> = {
@@ -651,7 +735,7 @@ app.patch('/api/posts/:id', writeLimiter, asyncHandler(async (req, res) => {
   if (cleanTags !== undefined) basePatch.tags = cleanTags;
   if (cover !== undefined) basePatch.cover_image_url = cover;
 
-  const updateRow = (stripOptional: boolean) => {
+  const updateRow = (stripOptional: boolean, authorJoin: string) => {
     const row = { ...basePatch };
     if (stripOptional) {
       delete row.tags;
@@ -661,14 +745,17 @@ app.patch('/api/posts/:id', writeLimiter, asyncHandler(async (req, res) => {
       .from('posts')
       .update(row)
       .eq('id', id)
-      .select('*, author:users!posts_author_id_fkey(*)')
+      .select(`*, ${authorJoin}`)
       .single();
   };
 
-  let { data, error } = await updateRow(false);
+  let { data, error } = await updateRow(false, AUTHOR_JOIN_FULL);
   if (error && isMissingColumnError(error, 'tags')) {
     console.warn('Optional column missing, retrying post update without tags/cover.');
-    ({ data, error } = await updateRow(true));
+    ({ data, error } = await updateRow(true, AUTHOR_JOIN_FULL));
+  }
+  if (error && isMissingColumnError(error, 'username')) {
+    ({ data, error } = await updateRow(true, AUTHOR_JOIN_BARE));
   }
 
   if (error) {
@@ -684,11 +771,12 @@ app.patch('/api/posts/:id', writeLimiter, asyncHandler(async (req, res) => {
 app.delete('/api/posts/:id', writeLimiter, asyncHandler(async (req, res) => {
   const db = requireWriteClient(req, res);
   if (!db) return;
-  const { id } = req.params;
+  const rawDeleteId = req.params.id;
+  const id = typeof rawDeleteId === 'string' ? rawDeleteId : '';
   const { authorId } = req.body || {};
 
-  if (!id) {
-    return res.status(400).json({ error: 'Missing post id' });
+  if (!id || !UUID_RE.test(id)) {
+    return res.status(400).json({ error: 'Invalid post id' });
   }
 
   const { data: existing, error: fetchError } = await supabaseAdmin
@@ -701,9 +789,18 @@ app.delete('/api/posts/:id', writeLimiter, asyncHandler(async (req, res) => {
     return res.status(404).json({ error: 'Post not found' });
   }
 
-  // authorId is mandatory — without it nobody (not even the author) deletes.
-  if (typeof authorId !== 'string' || authorId.length === 0 || existing.author_id !== authorId) {
-    return res.status(403).json({ error: 'Not the post author' });
+  // authorId is mandatory and must echo the caller's own identity — without
+  // it nobody (not even the author) deletes. Non-owned posts answer 404 so
+  // attackers cannot enumerate drafts by UUID.
+  const deleteSub = getTokenSub(req);
+  if (
+    typeof authorId !== 'string' ||
+    authorId.length === 0 ||
+    !deleteSub ||
+    deleteSub !== authorId ||
+    existing.author_id !== authorId
+  ) {
+    return res.status(404).json({ error: 'Post not found' });
   }
 
   const { error } = await db.from('posts').delete().eq('id', id);

@@ -85,7 +85,7 @@ export async function uploadCoverImage(
   }
   if (!authorId) throw new Error('لازم تسجّل دخولك عشان ترفع صورة.');
 
-  const safeName = file.name.replace(/[^\w.\-]+/g, '_').slice(-80) || 'cover';
+  const safeName = file.name.replace(/[^\w.-]+/g, '_').slice(-80) || 'cover';
   const path = `${authorId}/${Date.now()}-${safeName}`;
   const client = clerkToken ? getSupabaseClient(clerkToken) : supabase;
 
@@ -387,16 +387,27 @@ export async function deletePostFromSupabase(
 export async function fetchAllPosts(): Promise<Post[]> {
   let dbPostsList: Post[] = [];
 
-  // 1. Try Supabase client
+  // 1. Try Supabase client (author columns are explicit so user emails,
+  //    which are readable via RLS, are never pulled into the client)
   try {
-    const { data, error } = await supabase
+    const full = await supabase
       .from('posts')
-      .select('*, author:users!posts_author_id_fkey(*)')
+      .select('*, author:users!posts_author_id_fkey(id,name,avatar_url,username)')
       .eq('is_published', true)
       .order('created_at', { ascending: false });
 
-    if (data && !error && data.length > 0) {
-      dbPostsList = data.map(formatDbPost);
+    if (!full.error && full.data && full.data.length > 0) {
+      dbPostsList = full.data.map(formatDbPost);
+    } else if (full.error) {
+      // Pre-migration tables may lack `username` — retry without it.
+      const bare = await supabase
+        .from('posts')
+        .select('*, author:users!posts_author_id_fkey(id,name,avatar_url)')
+        .eq('is_published', true)
+        .order('created_at', { ascending: false });
+      if (bare.data && !bare.error && bare.data.length > 0) {
+        dbPostsList = bare.data.map(formatDbPost);
+      }
     }
   } catch (err) {
     console.warn('Supabase client query failed:', err);

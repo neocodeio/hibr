@@ -1,9 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowRight01Icon, UserAdd01Icon, UserCheck01Icon } from 'hugeicons-react';
+import { ArrowRight01Icon, UserAdd01Icon, UserCheck01Icon, PencilEdit01Icon } from 'hugeicons-react';
 import { useAuth } from '../lib/AuthContext';
 import { useSocial } from '../lib/SocialContext';
 import { supabase } from '../lib/supabase';
+import { sanitizeSocialLinks, type SocialLink } from '../lib/socialLinks';
+import SocialLinks from '../components/profile/SocialLinks';
+import SocialLinksEditor from '../components/profile/SocialLinksEditor';
 import { formatDbPost } from '../lib/posts';
 import { fetchPostsStats, subscribePostsRealtime } from '../lib/interactions';
 import type { PostsStats } from '../lib/interactions';
@@ -21,6 +24,53 @@ interface ProfileUser {
   avatarUrl: string;
   username: string | null;
   handle: string;
+  socialLinks: SocialLink[];
+}
+
+/** True when a Supabase error means `social_links` (or `username`) doesn't exist yet. */
+function isMissingColumnError(error: { code?: string; message?: string } | null, column: string): boolean {
+  if (!error) return false;
+  if (error.code === 'PGRST204' || error.code === '42703') return true;
+  const msg = (error.message || '').toLowerCase();
+  return msg.includes(column.toLowerCase()) && /column|schema|not find|not exist/i.test(msg);
+}
+
+interface UserRow {
+  id: string;
+  name?: string | null;
+  avatar_url?: string | null;
+  username?: string | null;
+  social_links?: unknown;
+}
+
+/** Fetch one user row, degrading gracefully when `username`/`social_links` columns are missing. */
+async function fetchUserRow(
+  field: 'username' | 'id',
+  value: string
+): Promise<{ row: UserRow | null; hasSocial: boolean }> {
+  const attempts = [
+    'id, name, avatar_url, username, social_links',
+    'id, name, avatar_url, username',
+    'id, name, avatar_url, social_links',
+    'id, name, avatar_url',
+  ];
+  for (const cols of attempts) {
+    // Skip username lookups when the attempted column set has no username.
+    if (field === 'username' && !cols.includes('username')) continue;
+    const res = await supabase.from('users').select(cols).eq(field, value).single();
+    if (!res.error && res.data) {
+      return { row: res.data as unknown as UserRow, hasSocial: cols.includes('social_links') };
+    }
+    const err = res.error as { code?: string; message?: string } | null;
+    // Table-level "no rows" (PGRST116): try the next strategy, don't retry columns.
+    if (err && err.code === 'PGRST116') return { row: null, hasSocial: false };
+    const missingSocial = isMissingColumnError(err, 'social_links');
+    const missingUsername = isMissingColumnError(err, 'username');
+    // Column error → try the next (reduced) column set; other errors → stop.
+    if (missingSocial || missingUsername) continue;
+    return { row: null, hasSocial: cols.includes('social_links') };
+  }
+  return { row: null, hasSocial: false };
 }
 
 function getInitial(name: string): string {
@@ -52,6 +102,8 @@ function ProfilePage() {
   const [followingCount, setFollowingCount] = useState(0);
   const [followBusy, setFollowBusy] = useState(false);
   const [isAvatarOpen, setIsAvatarOpen] = useState(false);
+  const [isSocialEditorOpen, setIsSocialEditorOpen] = useState(false);
+  const [socialAvailable, setSocialAvailable] = useState(false);
   const { followingIds, followsOn, toggleFollow } = useSocial();
   useDocumentMeta(profile?.name, profile ? `مقالات ${profile.name} في حِبر.` : undefined);
 
@@ -100,24 +152,18 @@ function ProfilePage() {
 
       try {
         // 1. Pretty username lookup (works once the `username` column exists).
-        const byUsername = await supabase
-          .from('users')
-          .select('id, name, avatar_url, username')
-          .eq('username', profileKey)
-          .single();
+        const byUsername = await fetchUserRow('username', profileKey);
 
-        let userRow = !byUsername.error && byUsername.data ? byUsername.data : null;
+        let userRow = byUsername.row;
+        let hasSocial = byUsername.hasSocial;
 
         // 2. Legacy fallback: raw user id (works with or without the column,
         //    so old /profile/:id links never break).
         if (!userRow) {
-          const byId = await supabase
-            .from('users')
-            .select('id, name, avatar_url')
-            .eq('id', profileKey)
-            .single();
-          if (!byId.error && byId.data) {
-            userRow = { ...byId.data, username: null };
+          const byId = await fetchUserRow('id', profileKey);
+          if (byId.row) {
+            userRow = byId.row;
+            hasSocial = byId.hasSocial;
           }
         }
 
@@ -126,6 +172,7 @@ function ProfilePage() {
           setIsLoading(false);
           return;
         }
+        setSocialAvailable(hasSocial);
 
         const name = userRow.name || 'كاتب حِبر';
         setProfile({
@@ -134,18 +181,31 @@ function ProfilePage() {
           avatarUrl: userRow.avatar_url || '',
           username: userRow.username || null,
           handle: userRow.username || name.toLowerCase().replace(/\s+/g, '-'),
+          socialLinks: sanitizeSocialLinks(userRow.social_links),
         });
 
         try {
-          const { data: postRows, error: postsError } = await supabase
+          // Author columns are explicit so other users' emails are never
+          // pulled into the client; retry bare pre-`username`-migration.
+          const full = await supabase
             .from('posts')
-            .select('*, author:users!posts_author_id_fkey(*)')
+            .select('*, author:users!posts_author_id_fkey(id,name,avatar_url,username)')
             .eq('author_id', userRow.id)
             .eq('is_published', true)
             .order('created_at', { ascending: false });
 
-          if (!postsError && postRows) {
-            setPosts(postRows.map(formatDbPost));
+          if (!full.error && full.data) {
+            setPosts(full.data.map(formatDbPost));
+          } else if (full.error) {
+            const bare = await supabase
+              .from('posts')
+              .select('*, author:users!posts_author_id_fkey(id,name,avatar_url)')
+              .eq('author_id', userRow.id)
+              .eq('is_published', true)
+              .order('created_at', { ascending: false });
+            if (!bare.error && bare.data) {
+              setPosts(bare.data.map(formatDbPost));
+            }
           }
         } catch (err) {
           console.warn('Error fetching profile posts from Supabase:', err);
@@ -300,6 +360,19 @@ function ProfilePage() {
             <p className="profile-page__handle" dir="ltr">
               @{profile.handle}
             </p>
+            <SocialLinks links={profile.socialLinks} />
+            {isOwnProfile && socialAvailable && (
+              <button
+                type="button"
+                className="profile-page__social-edit"
+                onClick={() => setIsSocialEditorOpen(true)}
+              >
+                <PencilEdit01Icon size={15} strokeWidth={1.75} aria-hidden="true" />
+                <span>
+                  {profile.socialLinks.length > 0 ? 'عدّل روابط التواصل' : 'أضف روابط التواصل'}
+                </span>
+              </button>
+            )}
             <div className="profile-page__stats" role="list" aria-label="إحصائيات الحساب">
               <span className="profile-page__stat" role="listitem">
                 <span className="profile-page__stat-value">{posts.length}</span>
@@ -401,6 +474,15 @@ function ProfilePage() {
         name={profile.name}
         onClose={() => setIsAvatarOpen(false)}
       />
+
+      {isSocialEditorOpen && isOwnProfile && (
+        <SocialLinksEditor
+          userId={profile.id}
+          initialLinks={profile.socialLinks}
+          onClose={() => setIsSocialEditorOpen(false)}
+          onSaved={(links) => setProfile((prev) => (prev ? { ...prev, socialLinks: links } : prev))}
+        />
+      )}
     </main>
   );
 }

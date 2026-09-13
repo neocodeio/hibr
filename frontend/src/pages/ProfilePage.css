@@ -154,6 +154,38 @@ button.profile-page__avatar:focus-visible {
   overflow-wrap: break-word;
 }
 
+/* ── Social links edit (own profile only) ─────────────────────── */
+.profile-page__social-edit {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  margin-top: var(--space-2);
+  padding: 4px var(--space-3);
+  border-radius: var(--radius-full);
+  color: var(--color-muted);
+  font-family: var(--font-base);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.4;
+  transition: color 0.15s ease, background-color 0.15s ease;
+}
+
+.profile-page__social-edit:hover {
+  color: var(--color-ink);
+  background-color: var(--color-surface);
+}
+
+.profile-page__social-edit:focus-visible {
+  outline: 2px solid var(--color-ink);
+  outline-offset: 2px;
+}
+
+.profile-page__social-edit svg {
+  display: block;
+  flex-shrink: 0;
+}
+
 /* Segmented stats — number over label, hairline dividers. */
 .profile-page__stats {
   display: flex;
