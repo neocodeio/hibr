@@ -357,26 +357,10 @@ function ProfilePage() {
           <div className="profile-page__identity">
             <h1 className="profile-page__name">
               {profile.name}
-              {isOwnProfile && (
-                <span className="profile-page__badge">ملفك الشخصي</span>
-              )}
             </h1>
             <p className="profile-page__handle" dir="ltr">
               @{profile.handle}
             </p>
-            <SocialLinks links={profile.socialLinks} />
-            {isOwnProfile && socialAvailable && (
-              <button
-                type="button"
-                className="profile-page__social-edit"
-                onClick={() => setIsSocialEditorOpen(true)}
-              >
-                <PencilEdit01Icon size={15} strokeWidth={1.75} aria-hidden="true" />
-                <span>
-                  {profile.socialLinks.length > 0 ? 'عدّل روابط التواصل' : 'أضف روابط التواصل'}
-                </span>
-              </button>
-            )}
             <div className="profile-page__stats" role="list" aria-label="إحصائيات الحساب">
               <span className="profile-page__stat" role="listitem">
                 <span className="profile-page__stat-value">{posts.length}</span>
@@ -419,6 +403,23 @@ function ProfilePage() {
               </div>
             )}
           </div>
+          {(profile.socialLinks.length > 0 || (isOwnProfile && socialAvailable)) && (
+            <div className="profile-page__social">
+              <SocialLinks links={profile.socialLinks} />
+              {isOwnProfile && socialAvailable && (
+                <button
+                  type="button"
+                  className="profile-page__social-edit"
+                  onClick={() => setIsSocialEditorOpen(true)}
+                >
+                  <PencilEdit01Icon size={15} strokeWidth={1.75} aria-hidden="true" />
+                  <span>
+                    {profile.socialLinks.length > 0 ? 'عدّل روابط التواصل' : 'أضف روابط التواصل'}
+                  </span>
+                </button>
+              )}
+            </div>
+          )}
         </header>
 
         <section className="profile-page__posts" aria-label="مقالات الكاتب">

@@ -135,18 +135,6 @@ button.profile-page__avatar:focus-visible {
   text-wrap: balance;
 }
 
-.profile-page__badge {
-  font-size: 11px;
-  font-weight: var(--font-weight-medium);
-  color: var(--color-muted);
-  background-color: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-full);
-  padding: 3px var(--space-3);
-  line-height: 1.4;
-  white-space: nowrap;
-}
-
 .profile-page__handle {
   font-size: var(--font-size-sm);
   color: var(--color-subtle);
@@ -154,7 +142,22 @@ button.profile-page__avatar:focus-visible {
   overflow-wrap: break-word;
 }
 
+/* ── Social links (far end of the header, icons only) ─────────── */
+.profile-page__social {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-2);
+  margin-inline-start: auto;
+  padding-top: 4px;
+  flex-shrink: 0;
+}
+
 /* ── Social links edit (own profile only) ─────────────────────── */
+.profile-page__social .profile-page__social-edit {
+  margin-top: 0;
+}
+
 .profile-page__social-edit {
   display: inline-flex;
   align-items: center;
@@ -419,6 +422,12 @@ button.profile-page__avatar:focus-visible {
 
   .profile-page__identity {
     align-items: center;
+  }
+
+  .profile-page__social {
+    align-items: center;
+    margin-inline-start: 0;
+    padding-top: 0;
   }
 
   .profile-page__name {

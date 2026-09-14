@@ -21,7 +21,7 @@ interface SocialLinksProps {
   links: SocialLink[];
 }
 
-/** Public row of social chips shown on any profile. */
+/** Public row of social icons shown on any profile (icons only, no text). */
 function SocialLinks({ links }: SocialLinksProps) {
   if (links.length === 0) return null;
   return (
@@ -36,8 +36,7 @@ function SocialLinks({ links }: SocialLinksProps) {
           aria-label={SOCIAL_PLATFORMS[link.platform].label}
           title={SOCIAL_PLATFORMS[link.platform].label}
         >
-          <PlatformIcon platform={link.platform} size={15} />
-          <span className="social-links__chip-label">{SOCIAL_PLATFORMS[link.platform].label}</span>
+          <PlatformIcon platform={link.platform} size={16} />
         </a>
       ))}
     </div>
