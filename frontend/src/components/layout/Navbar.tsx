@@ -133,6 +133,7 @@ function Navbar() {
           <nav className="navbar__nav" aria-label="التنقل الرئيسي">
             <Link to="/" className="navbar__link">المقالات</Link>
             <Link to="/trending" className="navbar__link">الرائج</Link>
+            <Link to="/people" className="navbar__link">الكتّاب</Link>
             {/* {isAuthenticated && (
               <Link to="/saved" className="navbar__link">المحفوظ</Link> KEEP IT LIKE THIS!
             )} */}

@@ -12,6 +12,7 @@ import ProfilePage from './pages/ProfilePage';
 import SavedPage from './pages/SavedPage';
 import NotificationsPage from './pages/NotificationsPage';
 import TrendingPage from './pages/TrendingPage';
+import PeoplePage from './pages/PeoplePage';
 import { getPostPath } from './lib/posts';
 import { notifyPostCreated } from './lib/postEvents';
 import { PostsProvider } from './lib/PostsContext';
@@ -69,6 +70,7 @@ function App() {
                 <Route path="/saved" element={<SavedPage />} />
                 <Route path="/notifications" element={<NotificationsPage />} />
                 <Route path="/trending" element={<TrendingPage />} />
+                <Route path="/people" element={<PeoplePage />} />
               {/* Unknown URLs redirect home instead of rendering a blank page */}
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
