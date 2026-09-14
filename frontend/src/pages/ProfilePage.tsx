@@ -102,6 +102,9 @@ function ProfilePage() {
   const [followingCount, setFollowingCount] = useState(0);
   const [followBusy, setFollowBusy] = useState(false);
   const [isAvatarOpen, setIsAvatarOpen] = useState(false);
+  // Broken avatar URLs fall back to the initial. Stores the URL (not a
+  // boolean) so navigating between profiles resets it automatically.
+  const [brokenAvatarUrl, setBrokenAvatarUrl] = useState<string | null>(null);
   const [isSocialEditorOpen, setIsSocialEditorOpen] = useState(false);
   const [socialAvailable, setSocialAvailable] = useState(false);
   const { followingIds, followsOn, toggleFollow } = useSocial();
@@ -327,7 +330,7 @@ function ProfilePage() {
         </Link>
 
         <header className="profile-page__header">
-          {profile.avatarUrl ? (
+          {profile.avatarUrl && profile.avatarUrl !== brokenAvatarUrl ? (
             <button
               type="button"
               className="profile-page__avatar profile-page__avatar--clickable"
@@ -340,6 +343,7 @@ function ProfilePage() {
                 src={profile.avatarUrl}
                 alt=""
                 loading="lazy"
+                onError={() => setBrokenAvatarUrl(profile.avatarUrl)}
               />
             </button>
           ) : (

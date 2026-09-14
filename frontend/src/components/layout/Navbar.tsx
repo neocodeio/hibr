@@ -39,6 +39,9 @@ function Navbar() {
 
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  // Broken avatar URLs fall back to the initial instead of a broken icon.
+  // Stores the URL (not a boolean) so switching accounts/avatars resets it.
+  const [brokenAvatarUrl, setBrokenAvatarUrl] = useState<string | null>(null);
 
   // Expanding navbar search. The query lives in the URL (?q=) so the feed
   // filters from anywhere: live while on the feed, on submit otherwise.
@@ -222,11 +225,12 @@ function Navbar() {
                   aria-expanded={isMenuOpen}
                   aria-label="قائمة الحساب"
                 >
-                  {user?.avatarUrl ? (
+                  {user?.avatarUrl && user.avatarUrl !== brokenAvatarUrl ? (
                     <img
                       className="navbar__avatar-img"
                       src={user.avatarUrl}
                       alt=""
+                      onError={() => setBrokenAvatarUrl(user.avatarUrl)}
                     />
                   ) : (
                     <span className="navbar__avatar-fallback" aria-hidden="true">

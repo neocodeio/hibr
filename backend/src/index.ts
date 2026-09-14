@@ -431,7 +431,7 @@ app.get('/sitemap.xml', asyncHandler(async (_req, res) => {
 app.post('/api/users/sync', writeLimiter, asyncHandler(async (req, res) => {
   const db = requireWriteClient(req, res);
   if (!db) return;
-  const { id, email, name, avatarUrl } = req.body ?? {};
+  const { id, email, name, avatarUrl, username } = req.body ?? {};
 
   if (typeof id !== 'string' || id.length === 0 || id.length > MAX_ID_LENGTH) {
     return res.status(400).json({ error: 'Missing required user fields (id, email)' });
@@ -445,6 +445,15 @@ app.post('/api/users/sync', writeLimiter, asyncHandler(async (req, res) => {
   if (avatarUrl !== undefined && avatarUrl !== '' && !isHttpUrl(avatarUrl)) {
     return res.status(400).json({ error: 'Invalid user fields' });
   }
+  // Clerk usernames: short, no spaces. Validated loosely — the DB UNIQUE
+  // constraint is the real guard against collisions.
+  const cleanUsername =
+    typeof username === 'string' && username.length > 0 && username.length <= 30
+      ? username
+      : undefined;
+  if (username !== undefined && username !== null && cleanUsername === undefined) {
+    return res.status(400).json({ error: 'Invalid user fields' });
+  }
 
   // The id being synced must be the caller's own identity — never trust the
   // body alone (RLS would reject it anyway, but with a confusing 500).
@@ -453,18 +462,35 @@ app.post('/api/users/sync', writeLimiter, asyncHandler(async (req, res) => {
     return res.status(403).json({ error: 'Not the profile owner' });
   }
 
-  const { data, error } = await db.from('users').upsert(
-    {
-      id,
-      email,
-      name: (typeof name === 'string' && name.trim()) || 'كاتب حِبر',
-      avatar_url: typeof avatarUrl === 'string' && isHttpUrl(avatarUrl) ? avatarUrl : '',
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: 'id' }
-  ).select().single();
+  const syncRow = (withUsername: boolean) =>
+    db.from('users').upsert(
+      {
+        id,
+        email,
+        name: (typeof name === 'string' && name.trim()) || 'كاتب حِبر',
+        avatar_url: typeof avatarUrl === 'string' && isHttpUrl(avatarUrl) ? avatarUrl : '',
+        updated_at: new Date().toISOString(),
+        ...(withUsername && cleanUsername ? { username: cleanUsername } : {}),
+      },
+      { onConflict: 'id' }
+    ).select().single();
+
+  let { data, error } = await syncRow(true);
+
+  // Pre-migration `users` tables have no `username` column — retry without it.
+  if (error && isMissingColumnError(error, 'username')) {
+    ({ data, error } = await syncRow(false));
+  }
 
   if (error) {
+    // 23505: this email (or username) is owned by a STALE row — typically a
+    // previous Clerk id after switching test/live instances. Report 409 with
+    // an actionable message instead of a generic 500.
+    if ((error as { code?: string }).code === '23505') {
+      return res.status(409).json({
+        error: 'Profile email conflict: a stale users row owns this email. Delete the old-id row in Supabase.',
+      });
+    }
     return serverError(res, error, 'Could not sync user profile');
   }
 

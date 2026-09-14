@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import type { ReactNode } from 'react';
 import { useUser, useAuth as useClerkAuth, useClerk } from '@clerk/clerk-react';
-import { getSupabaseClient, API_BASE_URL } from './supabase';
+import { getSupabaseClient, fetchBackendApi } from './supabase';
 
 export interface UserProfile {
   id: string;
@@ -168,19 +168,33 @@ export function AuthProvider({ children }: AuthProviderProps) {
           const { error } = await client
             .from('users')
             .upsert({ ...baseRecord, username: user.username }, { onConflict: 'id' });
-          if (error && (error.code === '42703' || /username/i.test(error.message || ''))) {
-            // The `username` column hasn't been added in Supabase yet —
-            // sync without it so login never breaks (pre-SQL fallback).
-            await client.from('users').upsert(baseRecord, { onConflict: 'id' });
+          if (error) {
+            if (error.code === '42703' || /username/i.test(error.message || '')) {
+              // The `username` column hasn't been added in Supabase yet —
+              // sync without it so login never breaks (pre-SQL fallback).
+              await client.from('users').upsert(baseRecord, { onConflict: 'id' });
+            } else if (error.code === '23505' || /duplicate|already exists|conflict/i.test(error.message || '')) {
+              // 409: this email is owned by a STALE row (usually a previous
+              // Clerk id after switching test/live instances). Likes and
+              // other FK-guarded writes will fail until that stale row is
+              // removed in Supabase (users table, delete the old-id row).
+              console.warn(
+                'Profile sync hit an email conflict (stale users row owns this email). ' +
+                  'Remove the old row in Supabase Table Editor → users.'
+              );
+            } else {
+              console.warn('Author client-side sync failed:', error.message);
+            }
           }
         } catch {
           // Client-side sync failed — the backend sync below acts as failsafe
         }
 
-        // 2. Failsafe: Backend API sync (RLS-enforced with the caller's JWT)
+        // 2. Failsafe: Backend API sync (RLS-enforced with the caller's JWT).
+        // Skipped when the backend API isn't configured (no CORS spam).
         try {
           const syncToken = await getToken({ template: 'supabase' }).catch(() => null);
-          await fetch(`${API_BASE_URL}/api/users/sync`, {
+          const res = await fetchBackendApi('/api/users/sync', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -191,8 +205,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
               email: user.email,
               name: user.name,
               avatarUrl: user.avatarUrl,
+              username: user.username,
             }),
           });
+          if (res && res.status === 409) {
+            console.warn(
+              'Backend profile sync: email conflict (stale users row). ' +
+                'Remove the old row in Supabase Table Editor → users.'
+            );
+          }
         } catch {
           // Backend offline fallback - client sync handled it
         }

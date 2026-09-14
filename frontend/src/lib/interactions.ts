@@ -17,6 +17,21 @@ export function emptyPostsStats(): PostsStats {
   return { likedIds: new Set(), likesCounts: new Map(), commentsCounts: new Map() };
 }
 
+/**
+ * Thrown when a write fails because the viewer's row is missing from
+ * public.users (stale email-conflict row or unsynced profile). Surfaced in
+ * Arabic so the viewer knows what to do instead of seeing a raw FK error.
+ */
+function missingProfileError(): Error {
+  return new Error(
+    'ملفك غير موجود في قاعدة البيانات — سجّل خروجك وادخل مجدداً، وإذا استمرت المشكلة احذف الصف القديم من جدول users في Supabase.'
+  );
+}
+
+function isForeignKeyError(error: { code?: string } | null): boolean {
+  return Boolean(error) && (error?.code === '23503' || /foreign key|violates/i.test((error as { message?: string })?.message || ''));
+}
+
 function formatCommentAuthor(raw: {
   id?: string | null;
   name?: string | null;
@@ -120,20 +135,36 @@ export async function toggleLike(
   const { error } = await client.from('likes').insert({ post_id: postId, user_id: userId });
   if (error) {
     if (error.code === '23505') return true;
+    if (isForeignKeyError(error)) throw missingProfileError();
     throw new Error(error.message);
   }
   return true;
 }
 
 export async function fetchComments(postId: string): Promise<PostComment[]> {
-  const { data, error } = await supabase
+  // Author columns are explicit so commenters' emails are never pulled in;
+  // retry bare on pre-`username`-migration databases.
+  const full = await supabase
     .from('comments')
-    .select('*, author:users!comments_user_id_fkey(*)')
+    .select('*, author:users!comments_user_id_fkey(id,name,avatar_url,username)')
     .eq('post_id', postId)
     .order('created_at', { ascending: true });
 
-  if (error) throw new Error(error.message);
-  return ((data || []) as Parameters<typeof formatCommentRow>[0][]).map(formatCommentRow);
+  if (!full.error && full.data) {
+    return ((full.data || []) as Parameters<typeof formatCommentRow>[0][]).map(formatCommentRow);
+  }
+  if (full.error) {
+    const bare = await supabase
+      .from('comments')
+      .select('*, author:users!comments_user_id_fkey(id,name,avatar_url)')
+      .eq('post_id', postId)
+      .order('created_at', { ascending: true });
+    if (!bare.error && bare.data) {
+      return ((bare.data || []) as Parameters<typeof formatCommentRow>[0][]).map(formatCommentRow);
+    }
+    throw new Error((bare.error || full.error)?.message || 'ما قدرنا نحمل التعليقات.');
+  }
+  return [];
 }
 
 export async function addComment(
@@ -168,6 +199,7 @@ export async function addComment(
   }
 
   if (error || !data) {
+    if (error && isForeignKeyError(error)) throw missingProfileError();
     throw new Error(error?.message || 'ما قدرنا ننشر التعليق، حاول مرة ثانية.');
   }
   return formatCommentRow(data);

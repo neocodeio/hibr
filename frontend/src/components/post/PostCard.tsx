@@ -47,6 +47,9 @@ function PostCard({ post, onDeleted, onPostUpdated, stats = null }: PostCardProp
   const [isPublishing, setIsPublishing] = useState(false);
   const [deleteError, setDeleteError] = useState('');
   const [commentsCount, setCommentsCount] = useState(post.commentsCount);
+  // Broken avatar URLs (expired Clerk img, 415s, etc.) fall back to the
+  // initial instead of showing a broken-image icon.
+  const [avatarBroken, setAvatarBroken] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const titleId = `post-card-title-${post.id}`;
 
@@ -187,12 +190,13 @@ function PostCard({ post, onDeleted, onPostUpdated, stats = null }: PostCardProp
         aria-label={`الملف الشخصي لـ ${post.author.name}`}
       >
         <div className="post-card__avatar" aria-hidden="true">
-          {post.author.avatarUrl ? (
+          {post.author.avatarUrl && !avatarBroken ? (
             <img
               className="post-card__avatar-image"
               src={post.author.avatarUrl}
               alt=""
               loading="lazy"
+              onError={() => setAvatarBroken(true)}
             />
           ) : (
             <span className="post-card__avatar-fallback">{getInitial(post.author.name)}</span>

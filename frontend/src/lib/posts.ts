@@ -1,4 +1,4 @@
-import { getSupabaseClient, supabase, API_BASE_URL } from './supabase';
+import { getSupabaseClient, supabase, API_BASE_URL, fetchBackendApi } from './supabase';
 import type { Post } from '../types';
 
 /** Shape of a post row as returned by Supabase / the Express backend. */
@@ -286,8 +286,10 @@ async function ensureAuthorExists(
     }
   }
 
-  // 3. Backend admin upsert (RLS-enforced with the caller's JWT)
-  const res = await fetch(`${API_BASE_URL}/api/users/sync`, {
+  // 3. Backend admin upsert (RLS-enforced with the caller's JWT).
+  // Skipped entirely when the backend API isn't configured (production
+  // without VITE_API_URL) — no CORS/ERR_FAILED spam.
+  const res = await fetchBackendApi('/api/users/sync', {
     method: 'POST',
     headers: backendHeaders(clerkToken),
     body: JSON.stringify({
@@ -296,10 +298,10 @@ async function ensureAuthorExists(
       name: profile.name,
       avatarUrl: profile.avatarUrl,
     }),
-  }).catch(() => null);
+  });
 
   if (!res || !res.ok) {
-    const detail = res ? `status ${res.status}` : 'backend unreachable';
+    const detail = res ? `status ${res.status}` : 'backend unreachable or not configured';
     throw new Error(
       `Could not create the author profile in the database (${detail}). ` +
         `Is the backend running on ${API_BASE_URL}?`
@@ -359,23 +361,22 @@ export async function deletePostFromSupabase(
     );
   }
 
-  // 2. Failsafe: Express backend API delete (RLS-enforced with the JWT)
-  try {
-    const res = await fetch(`${API_BASE_URL}/api/posts/${postId}`, {
-      method: 'DELETE',
-      headers: backendHeaders(clerkToken),
-      body: JSON.stringify({ authorId }),
-    });
+  // 2. Failsafe: Express backend API delete (RLS-enforced with the JWT).
+  // Skipped when the backend API isn't configured.
+  const res = await fetchBackendApi(`/api/posts/${postId}`, {
+    method: 'DELETE',
+    headers: backendHeaders(clerkToken),
+    body: JSON.stringify({ authorId }),
+  });
 
+  if (res) {
     if (res.ok) return;
     const message =
       (await res.json().catch(() => null))?.error || `HTTP ${res.status}`;
     console.error('Backend API post delete failed:', message);
     errors.push(`Backend: ${message}`);
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    console.error('Backend API post delete error:', err);
-    errors.push(`Backend: ${message}`);
+  } else {
+    errors.push('Backend: غير مهيأ (VITE_API_URL).');
   }
 
   throw new Error(`ما قدرنا نحذف المقال. ${errors.join(' | ')}`);
@@ -413,18 +414,15 @@ export async function fetchAllPosts(): Promise<Post[]> {
     console.warn('Supabase client query failed:', err);
   }
 
-  // 2. Try Express backend API if client list is empty
+  // 2. Try Express backend API if client list is empty (skipped when the
+  // backend API isn't configured — avoids CORS/ERR_FAILED spam on prod)
   if (dbPostsList.length === 0) {
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/posts`);
-      if (res.ok) {
-        const json = await res.json();
-        if (json.posts && Array.isArray(json.posts) && json.posts.length > 0) {
-          dbPostsList = json.posts.map(formatDbPost);
-        }
+    const res = await fetchBackendApi('/api/posts');
+    if (res?.ok) {
+      const json = await res.json().catch(() => null);
+      if (json?.posts && Array.isArray(json.posts) && json.posts.length > 0) {
+        dbPostsList = json.posts.map(formatDbPost);
       }
-    } catch {
-      // API fallback
     }
   }
 
@@ -528,26 +526,27 @@ export async function createPostInSupabase(
     );
   }
 
-  // 2. Failsafe: Express backend API insert (RLS-enforced with the JWT)
+  // 2. Failsafe: Express backend API insert (RLS-enforced with the JWT).
+  // Skipped when the backend API isn't configured.
   if (!savedPost) {
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/posts`, {
-        method: 'POST',
-        headers: backendHeaders(clerkToken),
-        body: JSON.stringify({
-          authorId: profile.id,
-          title: payload.title,
-          slug,
-          excerpt: payload.excerpt,
-          content: payload.content,
-          readTime,
-          authorName: profile.name,
-          tags,
-          coverImageUrl: cover,
-          isPublished,
-        }),
-      });
+    const res = await fetchBackendApi('/api/posts', {
+      method: 'POST',
+      headers: backendHeaders(clerkToken),
+      body: JSON.stringify({
+        authorId: profile.id,
+        title: payload.title,
+        slug,
+        excerpt: payload.excerpt,
+        content: payload.content,
+        readTime,
+        authorName: profile.name,
+        tags,
+        coverImageUrl: cover,
+        isPublished,
+      }),
+    });
 
+    if (res) {
       const json = await res.json().catch(() => null);
 
       if (res.ok && json?.success && json?.post) {
@@ -557,10 +556,8 @@ export async function createPostInSupabase(
         console.error('Backend API post creation failed:', message);
         errors.push(`Backend: ${message}`);
       }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      console.error('Backend API post creation error:', err);
-      errors.push(`Backend: ${message}`);
+    } else {
+      errors.push('Backend: غير مهيأ (VITE_API_URL).');
     }
   }
 
@@ -609,12 +606,12 @@ export async function setPostPublished(
     );
   }
 
-  try {
-    const res = await fetch(`${API_BASE_URL}/api/posts/${postId}`, {
-      method: 'PATCH',
-      headers: backendHeaders(clerkToken),
-      body: JSON.stringify({ authorId, isPublished: published }),
-    });
+  const res = await fetchBackendApi(`/api/posts/${postId}`, {
+    method: 'PATCH',
+    headers: backendHeaders(clerkToken),
+    body: JSON.stringify({ authorId, isPublished: published }),
+  });
+  if (res) {
     const json = await res.json().catch(() => null);
     if (res.ok && json?.success && json?.post) {
       return formatDbPost(json.post);
@@ -622,10 +619,8 @@ export async function setPostPublished(
     const message = json?.error || `HTTP ${res.status}`;
     console.error('Backend API post publish toggle failed:', message);
     errors.push(`Backend: ${message}`);
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    console.error('Backend API post publish toggle error:', err);
-    errors.push(`Backend: ${message}`);
+  } else {
+    errors.push('Backend: غير مهيأ (VITE_API_URL).');
   }
 
   throw new Error(`ما قدرنا ننشر المقال. ${errors.join(' | ')}`);
@@ -713,20 +708,20 @@ export async function updatePostInSupabase(
     );
   }
 
-  try {
-    const res = await fetch(`${API_BASE_URL}/api/posts/${postId}`, {
-      method: 'PATCH',
-      headers: backendHeaders(clerkToken),
-      body: JSON.stringify({
-        authorId,
-        title,
-        excerpt: patch.excerpt,
-        content,
-        tags,
-        coverImageUrl: cover,
-        isPublished: patch.isPublished,
-      }),
-    });
+  const res = await fetchBackendApi(`/api/posts/${postId}`, {
+    method: 'PATCH',
+    headers: backendHeaders(clerkToken),
+    body: JSON.stringify({
+      authorId,
+      title,
+      excerpt: patch.excerpt,
+      content,
+      tags,
+      coverImageUrl: cover,
+      isPublished: patch.isPublished,
+    }),
+  });
+  if (res) {
     const json = await res.json().catch(() => null);
     if (res.ok && json?.success && json?.post) {
       return formatDbPost(json.post);
@@ -734,10 +729,8 @@ export async function updatePostInSupabase(
     const message = json?.error || `HTTP ${res.status}`;
     console.error('Backend API post update failed:', message);
     errors.push(`Backend: ${message}`);
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    console.error('Backend API post update error:', err);
-    errors.push(`Backend: ${message}`);
+  } else {
+    errors.push('Backend: غير مهيأ (VITE_API_URL).');
   }
 
   throw new Error(`ما قدرنا نحفظ التعديلات. ${errors.join(' | ')}`);

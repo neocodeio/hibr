@@ -16,6 +16,18 @@ function isMissingTableError(error: { code?: string; message?: string } | null):
   return /42P01|not exist|could not find/i.test(msg);
 }
 
+function isForeignKeyError(error: { code?: string; message?: string } | null): boolean {
+  if (!error) return false;
+  if (error.code === '23503') return true;
+  return /foreign key|violates/i.test(error.message || '');
+}
+
+function missingProfileError(): Error {
+  return new Error(
+    'ملفك غير موجود في قاعدة البيانات — سجّل خروجك وادخل مجدداً، وإذا استمرت المشكلة احذف الصف القديم من جدول users في Supabase.'
+  );
+}
+
 // ── Availability probes (cached per session) ────────────────────
 
 let bookmarksAvailable: boolean | null = null;
@@ -71,6 +83,7 @@ export async function addBookmark(postId: string, userId: string, token: string 
   if (error) {
     if (error.code === '23505') return; // already saved
     if (isMissingTableError(error)) throw new Error('الحفظ مو متاح الحين، حاول بعدين.');
+    if (isForeignKeyError(error)) throw missingProfileError();
     throw new Error(error.message);
   }
 }
@@ -115,6 +128,7 @@ export async function addFollow(followingId: string, followerId: string, token: 
   if (error) {
     if (error.code === '23505') return; // already following
     if (isMissingTableError(error)) throw new Error('المتابعة مو متاحة الحين، حاول بعدين.');
+    if (isForeignKeyError(error)) throw missingProfileError();
     throw new Error(error.message);
   }
 }
