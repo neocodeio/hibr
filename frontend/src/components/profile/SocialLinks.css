@@ -13,23 +13,23 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 34px;
-  min-height: 34px;
+  width: 32px;
+  height: 32px;
+  min-height: 32px;
   padding: 0;
-  border: var(--border);
-  border-radius: var(--radius-full);
+  border: none;
+  border-radius: 0;
   background-color: transparent;
   color: var(--color-muted);
   text-decoration: none;
   line-height: 1;
-  transition: color 0.15s ease, background-color 0.15s ease, border-color 0.15s ease;
+  transition: color 0.15s ease, background-color 0.15s ease;
 }
 
 .social-links__chip:hover {
   color: var(--color-ink);
-  background-color: var(--color-hover);
-  border-color: var(--color-subtle);
+  background-color: transparent;
+  border-color: transparent;
   text-decoration: none;
 }
 
