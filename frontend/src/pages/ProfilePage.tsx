@@ -3,7 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { ArrowRight01Icon, UserAdd01Icon, UserCheck01Icon, PencilEdit01Icon } from 'hugeicons-react';
 import { useAuth } from '../lib/AuthContext';
 import { useSocial } from '../lib/SocialContext';
-import { supabase } from '../lib/supabase';
+import { supabase, getSupabaseClient } from '../lib/supabase';
 import { sanitizeSocialLinks, type SocialLink } from '../lib/socialLinks';
 import SocialLinks from '../components/profile/SocialLinks';
 import SocialLinksEditor from '../components/profile/SocialLinksEditor';
@@ -90,6 +90,7 @@ function ProfilePage() {
     user: currentUser,
     openCreatePostModal,
     isAuthenticated,
+    getSupabaseToken,
   } = useAuth();
 
   const [profile, setProfile] = useState<ProfileUser | null>(null);
@@ -225,25 +226,31 @@ function ProfilePage() {
   }, [profileKey]);
 
   // Own drafts (unpublished) — visible only on your own profile. RLS
-  // enforces this server-side too; the check here just avoids the query.
+  // allows authors to read their own drafts, but only when the request
+  // carries the Clerk JWT, so this must use the authenticated client.
+  // The anon client sees `auth.jwt() ->> 'sub'` as NULL and RLS hides
+  // every `is_published = false` row.
   useEffect(() => {
     if (!profile || !currentUser || profile.id !== currentUser.id) return;
     let cancelled = false;
-    supabase
-      .from('posts')
-      .select('*, author:users!posts_author_id_fkey(*)')
-      .eq('author_id', profile.id)
-      .eq('is_published', false)
-      .order('created_at', { ascending: false })
-      .then(({ data, error }) => {
-        if (!cancelled && !error && data) {
-          setDrafts(data.map(formatDbPost));
-        }
-      });
+    (async () => {
+      const token = await getSupabaseToken().catch(() => null);
+      if (cancelled) return;
+      const client = getSupabaseClient(token);
+      const { data, error } = await client
+        .from('posts')
+        .select('*, author:users!posts_author_id_fkey(*)')
+        .eq('author_id', profile.id)
+        .eq('is_published', false)
+        .order('created_at', { ascending: false });
+      if (!cancelled && !error && data) {
+        setDrafts(data.map(formatDbPost));
+      }
+    })();
     return () => {
       cancelled = true;
     };
-  }, [profile, currentUser]);
+  }, [profile, currentUser, getSupabaseToken]);
 
   // Follower counts for the shown profile (public, cheap count queries),
   // kept fresh by a realtime subscription. NOTE: deliberately NOT keyed on
