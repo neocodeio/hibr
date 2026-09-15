@@ -11,9 +11,19 @@
   background-color: transparent;
   border: none;
   /* border-bottom: 1px solid var(--color-border); */
-  border-radius: var(--radius-md);
+  /* border-radius: var(--radius-md); */
   padding: var(--space-6) var(--space-4);
   transition: background-color 0.15s ease;
+}
+
+/* ── Row dividers — hairline between consecutive posts.
+   Sibling-only (border-top) so lists never get a double border at
+   the top, and empty states / single posts stay border-free.
+   Token-based, so dark mode follows automatically. */
+.feed__list > .post-card + .post-card,
+.profile-page__list > .post-card + .post-card,
+.saved-page__list > .post-card + .post-card {
+  border-top: var(--border);
 }
 
 /* Lift the whole row above following siblings while its menu is open
