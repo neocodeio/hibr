@@ -1,0 +1,64 @@
+/* ============================================================
+   Shell — desktop 3-column app layout (Substack-style).
+   Below 1024px this is a plain block: mobile/tablet render
+   exactly as before (top navbar + single column + bottom bar).
+
+    Physical placement (sidebar RIGHT, rail LEFT) is explicit:
+    .shell uses direction:rtl so DOM order [sidebar, main, rail]
+    maps right→left, while each column keeps direction:rtl
+    for correct Arabic text. No visual-order vs DOM-order
+    mismatch for screen readers on desktop.
+   ============================================================ */
+
+.shell {
+  display: block;
+}
+
+@media (min-width: 1024px) {
+  .shell {
+    direction: rtl;
+    display: flex;
+    align-items: flex-start;
+    /* Full-bleed app frame: no max-width cap. The auto margins on
+       .shell__main absorb all free space equally, docking the sidebar
+       to the far left edge and the rail to the far right edge while
+       the center column stays centered — with 2 children (no rail
+       below 1300px) the main column still centers itself. */
+    justify-content: flex-start;
+    max-width: none;
+    margin: 0;
+    gap: var(--space-10);
+    padding: var(--space-6) var(--space-6) 0;
+  }
+
+  .shell > * {
+    direction: rtl;
+  }
+
+  .shell__main {
+    flex: 0 1 680px;
+    width: 100%;
+    min-width: 0;
+    max-width: 680px;
+    margin-inline: auto;
+  }
+
+  .shell__main > main {
+    width: 100%;
+  }
+
+  /* One uniform column: every page container fills .shell__main exactly,
+     so feed / post / profile / people / saved / notifications are all
+     pixel-identical in width on desktop. width:100% (not just max-width)
+     leaves no room for per-page variance. Below 1024px (.shell is a
+     plain block) each page keeps its own centered max-width. */
+  .shell__main .feed__wrapper,
+  .shell__main .profile-page__container,
+  .shell__main .people-page__container,
+  .shell__main .post-page__container,
+  .shell__main .saved-page__wrapper,
+  .shell__main .notifications-page__wrapper {
+    width: 100%;
+    max-width: 100%;
+  }
+}

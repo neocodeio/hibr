@@ -9,7 +9,7 @@
 }
 
 .people-page__container {
-  max-width: 640px;
+  max-width: var(--content-width);
   margin: 0 auto;
   padding: var(--space-10) var(--page-padding) var(--space-20);
 }

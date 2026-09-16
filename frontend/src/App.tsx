@@ -3,6 +3,9 @@ import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from
 import { AuthProvider, useAuth } from './lib/AuthContext';
 import { ThemeProvider } from './lib/ThemeProvider';
 import Navbar from './components/layout/Navbar';
+import Sidebar from './components/layout/Sidebar';
+import RightRail from './components/layout/RightRail';
+import './components/layout/Shell.css';
 // import Footer from './components/layout/Footer'; keep it like this "DO NOT CHANGE!"
 import AuthModal from './components/ui/AuthModal';
 import CreatePostModal from './components/post/CreatePostModal';
@@ -63,17 +66,23 @@ function App() {
         <AuthProvider>
           <AppShell>
             <Navbar />
-            <Routes>
-              <Route path="/" element={<FeedPage />} />
-              <Route path="/post/:slug" element={<PostPage />} />
-              <Route path="/profile/:username" element={<ProfilePage />} />
-                <Route path="/saved" element={<SavedPage />} />
-                <Route path="/notifications" element={<NotificationsPage />} />
-                <Route path="/trending" element={<TrendingPage />} />
-                <Route path="/people" element={<PeoplePage />} />
-              {/* Unknown URLs redirect home instead of rendering a blank page */}
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
+            <div className="shell">
+              <Sidebar />
+              <div className="shell__main">
+                <Routes>
+                  <Route path="/" element={<FeedPage />} />
+                  <Route path="/post/:slug" element={<PostPage />} />
+                  <Route path="/profile/:username" element={<ProfilePage />} />
+                  <Route path="/saved" element={<SavedPage />} />
+                  <Route path="/notifications" element={<NotificationsPage />} />
+                  <Route path="/trending" element={<TrendingPage />} />
+                  <Route path="/people" element={<PeoplePage />} />
+                  {/* Unknown URLs redirect home instead of rendering a blank page */}
+                  <Route path="*" element={<Navigate to="/" replace />} />
+                </Routes>
+              </div>
+              <RightRail />
+            </div>
             {/* <Footer /> */}
             <AuthModal />
             <GlobalCreatePostModal />

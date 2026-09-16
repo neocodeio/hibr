@@ -12,6 +12,8 @@
   max-width: 720px;
   margin: 0 auto;
   padding: 0 var(--space-6);
+  border-inline: var(--border);
+  min-height: 100vh;
 }
 
 /* ── Category / filter bar ──────────────────────────────────── */
@@ -110,6 +112,8 @@
 @media (max-width: 768px) {
   .feed__wrapper {
     padding: 0 var(--space-4);
+    border-inline: none;
+    min-height: auto;
   }
 
   .feed__tab {

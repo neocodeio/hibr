@@ -13,7 +13,7 @@ import {
   Search01Icon,
   Cancel01Icon,
   Notification01Icon,
-  Home01Icon,
+  DiscoverCircleIcon,
   Fire02Icon,
   PlusSignIcon,
 } from 'hugeicons-react';
@@ -334,7 +334,7 @@ function Navbar() {
         }
         aria-label="المقالات"
       >
-        <Home01Icon size={22} strokeWidth={1.75} aria-hidden="true" />
+        <DiscoverCircleIcon size={22} strokeWidth={1.75} aria-hidden="true" />
         <span className="navbar__tab-label">المقالات</span>
       </NavLink>
 

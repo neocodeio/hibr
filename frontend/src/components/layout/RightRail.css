@@ -1,0 +1,327 @@
+/* ============================================================
+   RightRail — desktop-only left rail (≥1300px, rendered via
+   useMediaQuery so it never mounts on smaller screens).
+   Search box + suggested writers. Quiet, no cards.
+   ============================================================ */
+
+.rail {
+  width: 300px;
+  flex-shrink: 0;
+  /* Sticky on the rail itself (not an inner div): the parent .shell is
+     the full page height, so this has room to stick while the feed
+     scrolls. Hidden scrollbar, still wheel-scrollable if content grows. */
+  position: sticky;
+  top: var(--space-8);
+  max-height: calc(100vh - var(--space-8) - var(--space-4));
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.rail::-webkit-scrollbar {
+  display: none;
+}
+
+.rail__sticky {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  padding-bottom: var(--space-2);
+}
+
+/* ── Search ──────────────────────────────────────────────── */
+.rail__search {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.rail__search-icon {
+  position: absolute;
+  inset-inline-start: 14px;
+  color: var(--color-subtle);
+  pointer-events: none;
+  flex-shrink: 0;
+}
+
+.rail__search-input {
+  width: 100%;
+  height: 42px;
+  font-family: var(--font-base);
+  font-size: var(--font-size-sm);
+  color: var(--color-ink);
+  background-color: var(--color-surface);
+  border: 1px solid transparent;
+  border-radius: var(--radius-full);
+  padding-inline-start: 40px;
+  padding-inline-end: 14px;
+  outline: none;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.rail__search-input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.rail__search-input::placeholder {
+  color: var(--color-subtle);
+}
+
+.rail__search-input:focus {
+  border-color: var(--color-ink);
+  background-color: var(--color-white);
+}
+
+/* ── Suggested writers ───────────────────────────────────── */
+.rail__block-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-2);
+}
+
+.rail__block-title {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-ink);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.rail__block-title svg {
+  display: block;
+  flex-shrink: 0;
+  color: var(--color-muted);
+}
+
+.rail__see-all {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-muted);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.rail__see-all:hover {
+  color: var(--color-ink);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.rail__writers {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.rail__writer {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+  border-top: var(--border);
+  min-width: 0;
+}
+
+.rail__writer:last-child {
+  border-bottom: var(--border);
+}
+
+.rail__who {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: 1;
+  min-width: 0;
+  text-decoration: none;
+  color: inherit;
+  border-radius: var(--radius-sm);
+}
+
+.rail__who:focus-visible {
+  outline: 2px solid var(--color-ink);
+  outline-offset: 2px;
+}
+
+.rail__who:hover .rail__name {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
+}
+
+.rail__avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: var(--radius-full);
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.rail__avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.rail__avatar-fallback {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-muted);
+  line-height: 1;
+  user-select: none;
+}
+
+.rail__identity {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  flex: 1;
+  text-align: right;
+}
+
+.rail__name {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-ink);
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: right;
+  width: 100%;
+}
+
+.rail__handle {
+  font-size: var(--font-size-xs);
+  color: var(--color-subtle);
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  /* Keep LTR reading order for "@handle" but pin it to the right,
+     directly under the Arabic display name. */
+  direction: ltr;
+  unicode-bidi: embed;
+  text-align: right;
+  width: 100%;
+  display: block;
+}
+
+.rail__follow {
+  flex-shrink: 0;
+  min-height: 30px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-ink);
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--color-ink);
+  font-family: var(--font-base);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  line-height: 1;
+  cursor: pointer;
+  transition: background-color 0.12s ease, color 0.12s ease, border-color 0.12s ease,
+    opacity 0.12s ease;
+}
+
+.rail__follow:hover {
+  background-color: var(--color-ink);
+  color: var(--color-white);
+}
+
+.rail__follow:focus-visible {
+  outline: 2px solid var(--color-ink);
+  outline-offset: 2px;
+}
+
+.rail__follow:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+.rail__follow--following {
+  border-color: var(--color-border);
+  color: var(--color-muted);
+}
+
+.rail__follow--following:hover {
+  border-color: var(--color-subtle);
+  background-color: transparent;
+  color: var(--color-ink);
+}
+
+/* ── Loading — flat pulse ────────────────────────────────── */
+.rail__skeleton {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) 0;
+  border-top: var(--border);
+}
+
+.rail__skeleton:last-child {
+  border-bottom: var(--border);
+}
+
+.rail__skeleton-avatar,
+.rail__skeleton-name,
+.rail__skeleton-meta {
+  background-color: var(--color-surface);
+  animation: rail-pulse 1.2s ease-in-out infinite alternate;
+}
+
+.rail__skeleton-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: var(--radius-full);
+  flex-shrink: 0;
+}
+
+.rail__skeleton-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+}
+
+.rail__skeleton-name {
+  width: 100px;
+  height: 12px;
+  border-radius: var(--radius-sm);
+}
+
+.rail__skeleton-meta {
+  width: 70px;
+  height: 10px;
+  border-radius: var(--radius-sm);
+}
+
+@keyframes rail-pulse {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0.45;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rail__skeleton-avatar,
+  .rail__skeleton-name,
+  .rail__skeleton-meta {
+    animation: none;
+  }
+
+  .rail__follow {
+    transition: none;
+  }
+}

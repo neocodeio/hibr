@@ -581,6 +581,27 @@
   }
 }
 
+/* ── Desktop 3-column shell: widen the bar to match, and hide the
+   inline nav links — the left sidebar owns navigation from here. ── */
+@media (min-width: 1024px) {
+  .navbar__inner {
+    max-width: 1280px;
+  }
+
+  .navbar__nav {
+    display: none;
+  }
+}
+
+/* ── Desktop shell owns the chrome: the sidebar holds the CTA, nav,
+   search (1024–1300), account and theme — so the old top bar hides
+   entirely ≥1024px. Mobile/tablet (<1024px) keep it untouched. ── */
+@media (min-width: 1024px) {
+  header.navbar {
+    display: none;
+  }
+}
+
 /* ── Reduced motion ────────────────────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
   .navbar__menu {

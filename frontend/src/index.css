@@ -88,8 +88,8 @@
   /* Border */
   --border-width: 1px;
   --border:       1px solid var(--color-border);
-  --radius-sm:    4px;
-  --radius-md:    8px;
+  --radius-sm:    8px;
+  --radius-md:    10px;
   --radius-lg:    12px;
   --radius-full:  9999px;
 
@@ -124,6 +124,13 @@ html {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
+  /* App-chrome look: the page still scrolls (wheel, touch, keyboard),
+     only the visual scrollbar track is hidden. */
+  scrollbar-width: none;
+}
+
+html::-webkit-scrollbar {
+  display: none;
 }
 
 body {
@@ -134,6 +141,11 @@ body {
   color: var(--color-ink);
   background-color: var(--color-white);
   min-height: 100vh;
+  scrollbar-width: none;
+}
+
+body::-webkit-scrollbar {
+  display: none;
 }
 
 /* ------------------------------------------------------------
