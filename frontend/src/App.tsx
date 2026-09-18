@@ -14,6 +14,7 @@ import PostPage from './pages/PostPage';
 import ProfilePage from './pages/ProfilePage';
 import SavedPage from './pages/SavedPage';
 import NotificationsPage from './pages/NotificationsPage';
+import ChatPage from './pages/ChatPage';
 import TrendingPage from './pages/TrendingPage';
 import PeoplePage from './pages/PeoplePage';
 import { getPostPath } from './lib/posts';
@@ -75,6 +76,7 @@ function App() {
                   <Route path="/profile/:username" element={<ProfilePage />} />
                   <Route path="/saved" element={<SavedPage />} />
                   <Route path="/notifications" element={<NotificationsPage />} />
+                  <Route path="/chat" element={<ChatPage />} />
                   <Route path="/trending" element={<TrendingPage />} />
                   <Route path="/people" element={<PeoplePage />} />
                   {/* Unknown URLs redirect home instead of rendering a blank page */}

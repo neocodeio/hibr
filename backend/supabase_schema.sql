@@ -280,3 +280,182 @@ ALTER TABLE public.users ADD COLUMN IF NOT EXISTS username TEXT UNIQUE;
 ALTER TABLE public.notifications DROP CONSTRAINT IF EXISTS notifications_no_self_notify;
 ALTER TABLE public.notifications
   ADD CONSTRAINT notifications_no_self_notify CHECK (recipient_id <> actor_id);
+
+-- 11. Chat (E2EE direct messages). Ciphertext-only: plaintext never leaves
+-- the browser (AES-GCM 256 via ECDH P-256 identity keys). Full script lives
+-- in backend/supabase_chat.sql — mirrored here so running this file alone
+-- is enough. Safe to re-run.
+-- ORDER MATTERS: tables first, then the helper function and policies that
+-- reference them (Postgres validates SQL-language functions at creation).
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS public_key JSONB;
+
+CREATE TABLE IF NOT EXISTS public.conversations (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  created_by TEXT NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  last_message_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS public.conversation_participants (
+  conversation_id UUID NOT NULL REFERENCES public.conversations(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (conversation_id, user_id)
+);
+
+CREATE OR REPLACE FUNCTION public.is_conversation_participant(conv_id UUID)
+RETURNS BOOLEAN
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM public.conversation_participants p
+    WHERE p.conversation_id = conv_id
+      AND p.user_id = (auth.jwt() ->> 'sub')
+  );
+$$;
+
+ALTER TABLE public.conversations ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Participants can view their conversations" ON public.conversations;
+CREATE POLICY "Participants can view their conversations"
+  ON public.conversations FOR SELECT
+  USING (
+    created_by = (auth.jwt() ->> 'sub')
+    OR public.is_conversation_participant(id)
+  );
+
+DROP POLICY IF EXISTS "Users can create conversations" ON public.conversations;
+CREATE POLICY "Users can create conversations"
+  ON public.conversations FOR INSERT
+  WITH CHECK (created_by = (auth.jwt() ->> 'sub'));
+
+DROP POLICY IF EXISTS "Participants can bump last message time" ON public.conversations;
+CREATE POLICY "Participants can bump last message time"
+  ON public.conversations FOR UPDATE
+  USING (public.is_conversation_participant(id))
+  WITH CHECK (public.is_conversation_participant(id));
+
+DROP POLICY IF EXISTS "Creators can delete their conversations" ON public.conversations;
+CREATE POLICY "Creators can delete their conversations"
+  ON public.conversations FOR DELETE
+  USING (created_by = (auth.jwt() ->> 'sub'));
+
+ALTER TABLE public.conversation_participants ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Participants can view participant rows" ON public.conversation_participants;
+CREATE POLICY "Participants can view participant rows"
+  ON public.conversation_participants FOR SELECT
+  USING (
+    user_id = (auth.jwt() ->> 'sub')
+    OR public.is_conversation_participant(conversation_id)
+  );
+
+DROP POLICY IF EXISTS "Users can add participants" ON public.conversation_participants;
+CREATE POLICY "Users can add participants"
+  ON public.conversation_participants FOR INSERT
+  WITH CHECK (
+    user_id = (auth.jwt() ->> 'sub')
+    OR EXISTS (
+      SELECT 1 FROM public.conversations c
+      WHERE c.id = conversation_id
+        AND c.created_by = (auth.jwt() ->> 'sub')
+    )
+    OR public.is_conversation_participant(conversation_id)
+  );
+
+DROP POLICY IF EXISTS "Users can leave conversations" ON public.conversation_participants;
+CREATE POLICY "Users can leave conversations"
+  ON public.conversation_participants FOR DELETE
+  USING (
+    user_id = (auth.jwt() ->> 'sub')
+    OR EXISTS (
+      SELECT 1 FROM public.conversations c
+      WHERE c.id = conversation_id
+        AND c.created_by = (auth.jwt() ->> 'sub')
+    )
+  );
+
+CREATE INDEX IF NOT EXISTS conversation_participants_user_idx
+  ON public.conversation_participants (user_id);
+CREATE INDEX IF NOT EXISTS conversation_participants_conv_idx
+  ON public.conversation_participants (conversation_id);
+
+CREATE TABLE IF NOT EXISTS public.messages (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  conversation_id UUID NOT NULL REFERENCES public.conversations(id) ON DELETE CASCADE,
+  sender_id TEXT NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  ciphertext TEXT NOT NULL CHECK (char_length(ciphertext) BETWEEN 1 AND 20000),
+  iv TEXT NOT NULL CHECK (char_length(iv) BETWEEN 1 AND 200),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+ALTER TABLE public.messages ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Participants can read messages" ON public.messages;
+CREATE POLICY "Participants can read messages"
+  ON public.messages FOR SELECT
+  USING (public.is_conversation_participant(conversation_id));
+
+DROP POLICY IF EXISTS "Participants can send messages" ON public.messages;
+CREATE POLICY "Participants can send messages"
+  ON public.messages FOR INSERT
+  WITH CHECK (
+    sender_id = (auth.jwt() ->> 'sub')
+    AND public.is_conversation_participant(conversation_id)
+  );
+
+DROP POLICY IF EXISTS "Senders can delete their own messages" ON public.messages;
+CREATE POLICY "Senders can delete their own messages"
+  ON public.messages FOR DELETE
+  USING (sender_id = (auth.jwt() ->> 'sub'));
+
+CREATE INDEX IF NOT EXISTS messages_conversation_created_idx
+  ON public.messages (conversation_id, created_at ASC);
+CREATE INDEX IF NOT EXISTS messages_sender_idx
+  ON public.messages (sender_id);
+
+CREATE OR REPLACE FUNCTION public.bump_conversation_last_message()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  UPDATE public.conversations
+  SET last_message_at = NEW.created_at
+  WHERE id = NEW.conversation_id;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_bump_conversation_last_message ON public.messages;
+CREATE TRIGGER trg_bump_conversation_last_message
+  AFTER INSERT ON public.messages
+  FOR EACH ROW
+  EXECUTE FUNCTION public.bump_conversation_last_message();
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables
+    WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'messages'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.messages;
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables
+    WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'conversations'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.conversations;
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables
+    WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'conversation_participants'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.conversation_participants;
+  END IF;
+END
+$$;

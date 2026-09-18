@@ -7,6 +7,7 @@ import {
   UserGroupIcon,
   AllBookmarkIcon,
   Notification01Icon,
+  Message01Icon,
   Search01Icon,
   Moon02Icon,
   Sun01Icon,
@@ -133,6 +134,12 @@ function Sidebar() {
             <AllBookmarkIcon size={20} strokeWidth={1.75} aria-hidden="true" />
             <span>المحفوظ</span>
           </NavLink>
+          {isAuthenticated && (
+            <NavLink to="/chat" className={linkClass}>
+              <Message01Icon size={20} strokeWidth={1.75} aria-hidden="true" />
+              <span>الرسائل</span>
+            </NavLink>
+          )}
           {isAuthenticated && notificationsOn && (
             <NavLink to="/notifications" className={linkClass}>
               <Notification01Icon size={20} strokeWidth={1.75} aria-hidden="true" />

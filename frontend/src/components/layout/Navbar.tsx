@@ -13,6 +13,7 @@ import {
   Search01Icon,
   Cancel01Icon,
   Notification01Icon,
+  Message01Icon,
   DiscoverCircleIcon,
   Fire02Icon,
   PlusSignIcon,
@@ -134,6 +135,9 @@ function Navbar() {
             <Link to="/" className="navbar__link">المقالات</Link>
             <Link to="/trending" className="navbar__link">الرائج</Link>
             <Link to="/people" className="navbar__link">الكتّاب</Link>
+            {isAuthenticated && (
+              <Link to="/chat" className="navbar__link">الرسائل</Link>
+            )}
             {/* {isAuthenticated && (
               <Link to="/saved" className="navbar__link">المحفوظ</Link> KEEP IT LIKE THIS!
             )} */}
@@ -183,6 +187,16 @@ function Navbar() {
               )}
             </form>
           </div>
+
+          {isAuthenticated && (
+            <Link
+              to="/chat"
+              className="navbar__bell"
+              aria-label="الرسائل المشفرة"
+            >
+              <Message01Icon size={18} strokeWidth={1.75} />
+            </Link>
+          )}
 
           {isAuthenticated && notificationsOn && (
             <Link
@@ -267,6 +281,15 @@ function Navbar() {
                     >
                       <Bookmark02Icon size={18} strokeWidth={1.5} />
                       <span>المحفوظ</span>
+                    </Link>
+                    <Link
+                      to="/chat"
+                      className="navbar__menu-item"
+                      role="menuitem"
+                      onClick={() => setIsMenuOpen(false)}
+                    >
+                      <Message01Icon size={18} strokeWidth={1.5} />
+                      <span>الرسائل</span>
                     </Link>
                     <button
                       type="button"
