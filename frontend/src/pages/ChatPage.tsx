@@ -405,6 +405,7 @@ function ChatPage() {
         {/* ── Conversation list ── */}
         <aside className="chat__sidebar" aria-label="المحادثات">
           <div className="chat__search">
+            <h1 style={{ fontSize: "12px", marginRight: "5px" }}>الرسائل - نسخة اولية</h1>
             <label htmlFor="chat-search" className="sr-only">ابحث عن كاتب لمراسلته</label>
             <input
               id="chat-search"
