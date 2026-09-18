@@ -204,11 +204,12 @@ function PostCard({ post, onDeleted, onPostUpdated, stats = null }: PostCardProp
         </div>
         <div className="post-card__author-meta">
           <span className="post-card__author-name">{post.author.name}</span>
-          <div className="post-card__meta-info">
-            <time className="post-card__date" dateTime={post.publishedAt}>
-              {formatRelativeTime(post.publishedAt)}
-            </time>
-          </div>
+          <span className="post-card__meta-dot" aria-hidden="true">
+            ·
+          </span>
+          <time className="post-card__date" dateTime={post.publishedAt}>
+            {formatRelativeTime(post.publishedAt)}
+          </time>
         </div>
       </Link>
 

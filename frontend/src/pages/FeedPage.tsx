@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { FileEmpty02Icon, Search01Icon } from 'hugeicons-react';
 import PostCard from '../components/post/PostCard';
 import { usePosts } from '../lib/PostsContext';
 import { useAuth } from '../lib/AuthContext';
@@ -54,70 +55,92 @@ function FeedPage() {
   return (
     <main className="feed" id="main-content">
       <div className="feed__wrapper">
-        {/* Tab bar */}
-        <div className="feed__bar">
-          <h1>المقالات</h1>
+        {/* Sticky header: title + tabs stay visible while scrolling */}
+        <div className="feed__header">
+          <div className="feed__bar">
+            <h1 className="feed__title">المقالات</h1>
+          </div>
+
+          {/* Feed tabs */}
+          {showFollowingTab && (
+            <div className="feed__tabs" role="tablist" aria-label="نوع المقالات">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={feedTab === 'all'}
+                className={`feed__tab${feedTab === 'all' ? ' feed__tab--active' : ''}`}
+                onClick={() => setFeedTab('all')}
+              >
+                الكل
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={feedTab === 'following'}
+                className={`feed__tab${feedTab === 'following' ? ' feed__tab--active' : ''}`}
+                onClick={() => setFeedTab('following')}
+              >
+                اللي أتابعهم
+              </button>
+            </div>
+          )}
+
+          {/* Active filter summary */}
+          {isFiltering && !showInitialLoading && (
+            <div className="feed__filter-meta">
+              <span className="feed__filter-count">
+                {filtered.length} {pluralPosts(filtered.length)}
+                {activeTag ? ` بوسم ${activeTag}` : ''}
+              </span>
+              <button
+                type="button"
+                className="feed__filter-clear"
+                onClick={clearFilters}
+              >
+                امسح الفلتر
+              </button>
+            </div>
+          )}
         </div>
-
-        {/* Feed tabs */}
-        {showFollowingTab && (
-          <div className="feed__tabs" role="tablist" aria-label="نوع المقالات">
-            <button
-              type="button"
-              role="tab"
-              aria-selected={feedTab === 'all'}
-              className={`feed__tab${feedTab === 'all' ? ' feed__tab--active' : ''}`}
-              onClick={() => setFeedTab('all')}
-            >
-              الكل
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={feedTab === 'following'}
-              className={`feed__tab${feedTab === 'following' ? ' feed__tab--active' : ''}`}
-              onClick={() => setFeedTab('following')}
-            >
-              اللي أتابعهم
-            </button>
-          </div>
-        )}
-
-        {/* Active filter summary */}
-        {isFiltering && !showInitialLoading && (
-          <div className="feed__filter-meta">
-            <span className="feed__filter-count">
-              {filtered.length} {pluralPosts(filtered.length)}
-              {activeTag ? ` بوسم ${activeTag}` : ''}
-            </span>
-            <button
-              type="button"
-              className="feed__filter-clear"
-              onClick={clearFilters}
-            >
-              امسح الفلتر
-            </button>
-          </div>
-        )}
 
         {/* Post list */}
         <section className="feed__list" aria-label="قائمة المقالات">
           <h1 className="sr-only">المقالات</h1>
           {showInitialLoading ? (
-            <div className="feed__loading" style={{ padding: '2rem 0', textAlign: 'center', color: 'var(--color-muted)' }}>
-              نحمّل المقالات...
+            <div className="feed__skeletons" aria-hidden="true">
+              {[0, 1, 2].map((i) => (
+                <div className="feed__skeleton" key={i}>
+                  <div className="feed__skeleton-author">
+                    <div className="feed__skeleton-avatar" />
+                    <div className="feed__skeleton-line feed__skeleton-line--short" />
+                  </div>
+                  <div className="feed__skeleton-line feed__skeleton-line--title" />
+                  <div className="feed__skeleton-line" />
+                  <div className="feed__skeleton-line feed__skeleton-line--short" />
+                </div>
+              ))}
+              <span className="sr-only" role="status">
+                نحمّل المقالات...
+              </span>
             </div>
           ) : filtered.length === 0 ? (
-            <div className="feed__loading" style={{ padding: '2rem 0', textAlign: 'center', color: 'var(--color-muted)' }}>
+            <div className="feed__empty" role="status">
+              <span className="feed__empty-icon" aria-hidden="true">
+                {isFiltering ? (
+                  <Search01Icon size={26} strokeWidth={1.5} />
+                ) : (
+                  <FileEmpty02Icon size={26} strokeWidth={1.5} />
+                )}
+              </span>
               {feedTab === 'following' && !query.trim() && !activeTag ? (
                 followingIds.size === 0 ? (
-                  <p>ما تتابع أحد للحين — تابع كتّاب يعجبونك وتشوف مقالاتهم هنا.</p>
+                  <p className="feed__empty-text">ما تتابع أحد للحين — تابع كتّاب يعجبونك وتشوف مقالاتهم هنا.</p>
                 ) : (
-                  <p>اللي تتابعهم ما نشروا شي للحين.</p>
+                  <p className="feed__empty-text">اللي تتابعهم ما نشروا شي للحين.</p>
                 )
               ) : isFiltering ? (
                 <>
-                  <p style={{ marginBottom: '1rem' }}>ما لقينا شي يطابق بحثك.</p>
+                  <p className="feed__empty-text">ما لقينا شي يطابق بحثك.</p>
                   <button
                     type="button"
                     className="feed__filter-clear"
@@ -127,7 +150,7 @@ function FeedPage() {
                   </button>
                 </>
               ) : (
-                'ما فيه مقالات للحين.'
+                <p className="feed__empty-text">ما فيه مقالات للحين.</p>
               )}
             </div>
           ) : (

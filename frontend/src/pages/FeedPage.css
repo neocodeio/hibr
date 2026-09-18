@@ -1,9 +1,11 @@
 /* ============================================================
-   FeedPage — Substack-style centered single column
+   FeedPage — modern minimalist centered column
+   Sticky blurred header · refined tabs · skeleton loading
    ============================================================ */
 
 .feed {
   flex: 1;
+  min-width: 0;
   background-color: var(--color-white);
 }
 
@@ -16,57 +18,96 @@
   min-height: 100vh;
 }
 
-/* ── Category / filter bar ──────────────────────────────────── */
+/* ── Sticky header (title + tabs + filter) ──────────────────── */
+.feed__header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  margin: 0 calc(-1 * var(--space-6));
+  padding: 0 var(--space-6);
+  background-color: color-mix(in srgb, var(--color-white) 88%, transparent);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  border-bottom: var(--border);
+}
+
 .feed__bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  /* border-bottom: var(--border); */
-  padding: var(--space-5) 0 0;
+  padding-top: var(--space-5);
 }
 
+.feed__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(1.25rem, 1.1rem + 1vw, 1.5rem);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--letter-spacing-tight);
+  color: var(--color-ink);
+  line-height: var(--line-height-tight);
+}
+
+/* ── Tabs — quiet underline, animated indicator ─────────────── */
 .feed__tabs {
   display: flex;
   align-items: flex-end;
-  gap: 0;
+  gap: var(--space-1);
   margin-top: var(--space-3);
-  border-bottom: var(--border);
 }
 
 .feed__tab {
+  position: relative;
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-regular);
   color: var(--color-subtle);
-  padding: var(--space-2) var(--space-4) var(--space-3);
-  border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
+  padding: var(--space-2) var(--space-3) var(--space-3);
   cursor: pointer;
   background: none;
-  border-top: none;
-  border-right: none;
-  border-left: none;
+  border: none;
   font-family: var(--font-base);
-  transition: color 0.12s ease, border-color 0.12s ease;
   white-space: nowrap;
+  transition: color 0.15s ease;
+}
+
+.feed__tab::after {
+  content: '';
+  position: absolute;
+  inset-inline: var(--space-3);
+  bottom: -1px;
+  height: 2px;
+  border-radius: var(--radius-full);
+  background-color: currentColor;
+  transform: scaleX(0);
+  transition: transform 0.18s ease;
 }
 
 .feed__tab:hover {
   color: var(--color-ink);
 }
 
+.feed__tab:focus-visible {
+  outline: 2px solid var(--color-ink);
+  outline-offset: -2px;
+  border-radius: var(--radius-sm);
+}
+
 .feed__tab--active {
   color: var(--color-ink);
   font-weight: var(--font-weight-medium);
-  border-bottom-color: var(--color-ink);
 }
 
-/* ── Filter summary ─────────────────────────────────────────── */
+.feed__tab--active::after {
+  transform: scaleX(1);
+}
+
+/* ── Filter summary — pill chip ─────────────────────────────── */
 .feed__filter-meta {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-3);
-  margin-top: var(--space-4);
+  padding: var(--space-2) 0 var(--space-3);
 }
 
 .feed__filter-count {
@@ -80,18 +121,19 @@
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-medium);
   color: var(--color-muted);
-  background: none;
-  border: none;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-full);
-  padding: 6px 10px;
+  padding: 6px 14px;
   cursor: pointer;
   white-space: nowrap;
-  transition: color 0.12s ease, background-color 0.12s ease;
+  transition: color 0.12s ease, background-color 0.12s ease, border-color 0.12s ease;
 }
 
 .feed__filter-clear:hover {
   color: var(--color-ink);
-  background-color: var(--color-surface);
+  background-color: var(--color-hover);
+  border-color: var(--color-subtle);
 }
 
 .feed__filter-clear:focus-visible {
@@ -99,13 +141,130 @@
   outline-offset: 2px;
 }
 
-/* ── Post list — editorial rows separated by hairline dividers ── */
+/* ── Post list ──────────────────────────────────────────────── */
 .feed__list {
   display: flex;
   flex-direction: column;
   gap: 0;
-  padding-top: var(--space-5);
+  padding-top: var(--space-2);
   padding-bottom: var(--space-20);
+}
+
+/* Entrance: soft rise, staggered, capped at 8 items */
+.feed__list > .post-card {
+  animation: feed-rise 0.4s ease both;
+}
+
+.feed__list > .post-card:nth-child(2) { animation-delay: 0.04s; }
+.feed__list > .post-card:nth-child(3) { animation-delay: 0.08s; }
+.feed__list > .post-card:nth-child(4) { animation-delay: 0.12s; }
+.feed__list > .post-card:nth-child(5) { animation-delay: 0.16s; }
+.feed__list > .post-card:nth-child(6) { animation-delay: 0.2s; }
+.feed__list > .post-card:nth-child(7) { animation-delay: 0.24s; }
+.feed__list > .post-card:nth-child(8) { animation-delay: 0.28s; }
+
+@keyframes feed-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ── Skeleton loading ───────────────────────────────────────── */
+.feed__skeletons {
+  display: flex;
+  flex-direction: column;
+  padding-top: var(--space-4);
+  padding-bottom: var(--space-20);
+}
+
+.feed__skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: var(--space-6) var(--space-4);
+}
+
+.feed__skeleton + .feed__skeleton {
+  border-top: var(--border);
+}
+
+.feed__skeleton-author {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.feed__skeleton-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-full);
+  background-color: var(--color-surface);
+}
+
+.feed__skeleton-line {
+  height: 12px;
+  border-radius: var(--radius-sm);
+  background-color: var(--color-surface);
+  animation: feed-pulse 1.3s ease-in-out infinite alternate;
+}
+
+.feed__skeleton-line--title {
+  height: 18px;
+  width: 72%;
+}
+
+.feed__skeleton-line--short {
+  width: 34%;
+}
+
+.feed__skeleton-avatar {
+  animation: feed-pulse 1.3s ease-in-out infinite alternate;
+}
+
+@keyframes feed-pulse {
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0.4;
+  }
+}
+
+/* ── Empty state ────────────────────────────────────────────── */
+.feed__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-20) var(--space-6);
+  text-align: center;
+}
+
+.feed__empty-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius-full);
+  background-color: var(--color-surface);
+  color: var(--color-subtle);
+}
+
+.feed__empty-text {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-muted);
+  line-height: var(--line-height-loose);
+  max-width: 34ch;
+  text-wrap: pretty;
 }
 
 /* ── Responsive ─────────────────────────────────────────────── */
@@ -116,14 +275,47 @@
     min-height: auto;
   }
 
+  .feed__header {
+    margin: 0 calc(-1 * var(--space-4));
+    padding: 0 var(--space-4);
+  }
+
+  .feed__bar {
+    padding-top: var(--space-4);
+  }
+
   .feed__tab {
-    padding: var(--space-2) var(--space-3) var(--space-3);
+    padding: var(--space-2) var(--space-2) var(--space-3);
     font-size: var(--font-size-xs);
+  }
+
+  .feed__tab::after {
+    inset-inline: var(--space-2);
   }
 }
 
 @media (max-width: 480px) {
   .feed__wrapper {
     padding: 0 var(--space-4);
+  }
+
+  .feed__empty {
+    padding: var(--space-16) var(--space-4);
+  }
+}
+
+/* ── Reduced motion ─────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .feed__list > .post-card {
+    animation: none;
+  }
+
+  .feed__tab::after {
+    transition: none;
+  }
+
+  .feed__skeleton-line,
+  .feed__skeleton-avatar {
+    animation: none;
   }
 }
