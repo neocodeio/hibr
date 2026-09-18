@@ -1,9 +1,14 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
+import { registerSW } from 'virtual:pwa-register';
 import { ClerkProvider } from '@clerk/clerk-react';
 import { arSA } from '@clerk/localizations';
 import './index.css';
 import App from './App.tsx';
+
+// Installable PWA: precaches the app shell and keeps it updated.
+// No-op on browsers without service-worker support.
+registerSW({ immediate: true });
 
 const PUBLISHABLE_KEY =
   import.meta.env.VITE_CLERK_PUBLISHABLE_KEY ||
