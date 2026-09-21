@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useAuth } from './AuthContext';
-import { CHAT_SEEN_EVENT, CHAT_SEEN_PREFIX } from './chatCache';
+import { CHAT_SEEN_EVENT, CHAT_SEEN_PREFIX, CHAT_SYNC_EVENT } from './chatCache';
 import {
   probeChatTables,
   listConversations,
@@ -50,10 +50,15 @@ export function useChatUnread(): number {
  * is keyed by user id, so state never leaks across accounts).
  *
  * It counts message rows — no decryption involved — using the same
- * `hibr:chat-seen:<userId>` read-marks the chat page writes. Live via the
- * same realtime feed, so the navbar/sidebar badge lights up the moment a
- * message arrives, on ANY page. ChatPage itself is untouched apart from
- * broadcasting a window event when it marks threads read.
+ * read-marks the chat page writes. Live via the same realtime feed, so the
+ * navbar/sidebar badge lights up the moment a message arrives, on ANY page.
+ *
+ * Resilience (this is why a badge must never need /chat open first):
+ * - initial load retries with backoff (the Supabase JWT may not be ready
+ *   on the very first tick → RLS would return empty once and never again);
+ * - a transient empty result never wipes previously good ids;
+ * - refocus / visibility / chat-page syncs all trigger catch-up;
+ * - a dropped realtime channel resubscribes (bounded).
  */
 export function ChatUnreadProvider({ children }: { children: ReactNode }) {
   const { isAuthenticated, user, getSupabaseToken } = useAuth();
@@ -61,14 +66,30 @@ export function ChatUnreadProvider({ children }: { children: ReactNode }) {
   const [convIds, setConvIds] = useState<Set<string>>(new Set());
   const [rows, setRows] = useState<ChatMessageRow[]>([]);
   const [seen, setSeen] = useState<Record<string, string>>({});
+  const [channelKey, setChannelKey] = useState(0);
   const userId = user?.id ?? null;
 
+  const aliveRef = useRef(true);
+  useEffect(() => {
+    aliveRef.current = true;
+    return () => {
+      aliveRef.current = false;
+    };
+  }, []);
+
   // Realtime handlers read through a ref so the subscription is created
-  // once and never goes stale (no resubscribe loops).
+  // once per channelKey and never goes stale (no resubscribe loops).
   const liveRef = useRef({ convIds, userId });
   useEffect(() => {
     liveRef.current = { convIds, userId };
   }, [convIds, userId]);
+
+  // Set once a full load completes — gates the boot retries below.
+  const readyRef = useRef(false);
+  // Last catch-up timestamp — throttles focus/visibility refetch storms.
+  const lastCatchUpRef = useRef(0);
+  // Bounded realtime recovery attempts (reset on every clean connect).
+  const resubAttemptsRef = useRef(0);
 
   // Skip everything until the chat migration is confirmed present.
   useEffect(() => {
@@ -86,23 +107,56 @@ export function ChatUnreadProvider({ children }: { children: ReactNode }) {
     try {
       const token = await getSupabaseToken();
       const convs = await listConversations(user.id, token);
-      setConvIds(new Set(convs.map((c) => c.id)));
+      if (!aliveRef.current) return;
+      // Never let a transient (RLS/token) empty wipe good known ids.
+      setConvIds((prev) =>
+        convs.length === 0 && prev.size > 0 ? prev : new Set(convs.map((c) => c.id))
+      );
       const recent = await listRecentMessages(
         convs.map((c) => c.id),
         token,
         150
       );
+      if (!aliveRef.current) return;
       setRows(recent);
+      readyRef.current = true;
     } catch {
-      // Badge stays at its last value; realtime + refocus retry later.
+      // Badge keeps its last value; retries + refocus cover it later.
     }
   }, [user, getSupabaseToken]);
 
-  // Initial load (counts only — no spinners anywhere; it's a badge).
+  const catchUp = useCallback(
+    (throttled = true) => {
+      if (!user) return;
+      const now = Date.now();
+      if (throttled && now - lastCatchUpRef.current < 10000) return;
+      lastCatchUpRef.current = now;
+      setSeen(loadSeen(user.id));
+      void refreshIdsAndRows();
+    },
+    [user, refreshIdsAndRows]
+  );
+
+  // Initial load (+ bounded boot retries while nothing ever completed).
   useEffect(() => {
     if (!isAuthenticated || !user || !chatOn) return;
+    let cancelled = false;
     setSeen(loadSeen(user.id));
     void refreshIdsAndRows();
+    const timers: number[] = [];
+    for (const ms of [2500, 8000]) {
+      timers.push(
+        window.setTimeout(() => {
+          if (!cancelled && aliveRef.current && !readyRef.current) {
+            void refreshIdsAndRows();
+          }
+        }, ms)
+      );
+    }
+    return () => {
+      cancelled = true;
+      timers.forEach((t) => window.clearTimeout(t));
+    };
   }, [isAuthenticated, user, chatOn, refreshIdsAndRows]);
 
   const mergeRow = useCallback((row: ChatMessageRow) => {
@@ -119,8 +173,19 @@ export function ChatUnreadProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
     void (async () => {
       const token = await getSupabaseToken();
-      if (cancelled) return;
+      if (cancelled || !aliveRef.current) return;
       unsubscribe = subscribeMyChat(token, {
+        onStatus: (s) => {
+          if (cancelled || !aliveRef.current) return;
+          if (s === 'live') {
+            resubAttemptsRef.current = 0;
+          } else if (s === 'offline' && resubAttemptsRef.current < 5) {
+            resubAttemptsRef.current += 1;
+            window.setTimeout(() => {
+              if (!cancelled && aliveRef.current) setChannelKey((k) => k + 1);
+            }, 4000);
+          }
+        },
         onInsert: (row) => {
           // Brand-new DM started by the peer — pull ids + previews.
           if (!liveRef.current.convIds.has(row.conversation_id)) {
@@ -140,25 +205,33 @@ export function ChatUnreadProvider({ children }: { children: ReactNode }) {
       cancelled = true;
       unsubscribe?.();
     };
-  }, [isAuthenticated, user, chatOn, getSupabaseToken, mergeRow, refreshIdsAndRows]);
+  }, [isAuthenticated, user, chatOn, channelKey, getSupabaseToken, mergeRow, refreshIdsAndRows]);
 
-  // ChatPage broadcasts this when it marks threads read; refocus also
-  // reloads marks (covers reads from another tab).
+  // ChatPage broadcasts CHAT_SEEN_EVENT when it marks threads read and
+  // CHAT_SYNC_EVENT after every successful load — either one heals this
+  // badge even if the boot tick ran before the token was ready.
+  // Refocus/visibility also catch up (covers other tabs + sleep).
   useEffect(() => {
     if (!user) return;
-    const reloadSeen = () => setSeen(loadSeen(user.id));
+    const onSeen = () => setSeen(loadSeen(user.id));
+    const onSync = () => catchUp(false);
+    const onFocus = () => catchUp(true);
     const onVisible = () => {
-      if (!document.hidden) reloadSeen();
+      if (!document.hidden) catchUp(true);
     };
-    window.addEventListener(CHAT_SEEN_EVENT, reloadSeen);
-    window.addEventListener('focus', reloadSeen);
+    window.addEventListener(CHAT_SEEN_EVENT, onSeen);
+    window.addEventListener(CHAT_SYNC_EVENT, onSync);
+    window.addEventListener('focus', onFocus);
+    window.addEventListener('online', onFocus);
     document.addEventListener('visibilitychange', onVisible);
     return () => {
-      window.removeEventListener(CHAT_SEEN_EVENT, reloadSeen);
-      window.removeEventListener('focus', reloadSeen);
+      window.removeEventListener(CHAT_SEEN_EVENT, onSeen);
+      window.removeEventListener(CHAT_SYNC_EVENT, onSync);
+      window.removeEventListener('focus', onFocus);
+      window.removeEventListener('online', onFocus);
       document.removeEventListener('visibilitychange', onVisible);
     };
-  }, [user]);
+  }, [user, catchUp]);
 
   const chatUnread = useMemo(
     () => (userId ? countUnread(rows, convIds, seen, userId) : 0),

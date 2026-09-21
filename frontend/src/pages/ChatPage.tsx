@@ -19,7 +19,7 @@ import {
   subscribeMyChat,
 } from '../lib/chat';
 import { encryptForPeer, decryptFromPeer, cryptoAvailable } from '../lib/chatCrypto';
-import { getChatSnapshot, setChatSnapshot, CHAT_SEEN_PREFIX, CHAT_SEEN_EVENT } from '../lib/chatCache';
+import { getChatSnapshot, setChatSnapshot, CHAT_SEEN_PREFIX, CHAT_SEEN_EVENT, CHAT_SYNC_EVENT } from '../lib/chatCache';
 import type { PublicJwk } from '../lib/chatCrypto';
 import type { ChatConversation, ChatMessageRow, ChatPeer } from '../lib/chat';
 import './ChatPage.css';
@@ -471,6 +471,8 @@ function ChatPage() {
           }
         })();
       }
+      // Tell the app-wide chat badge (ChatUnreadContext) fresh data landed.
+      window.dispatchEvent(new Event(CHAT_SYNC_EVENT));
     } catch (err) {
       if (!silent) setError(err instanceof Error ? err.message : 'تعذر تحميل المحادثات');
     } finally {

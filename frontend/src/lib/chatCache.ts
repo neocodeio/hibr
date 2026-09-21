@@ -24,6 +24,9 @@ export const CHAT_SEEN_PREFIX = 'hibr:chat-seen:';
 /** Window event ChatPage dispatches after marking threads read (shared with ChatUnreadContext). */
 export const CHAT_SEEN_EVENT = 'hibr:chat-seen-changed';
 
+/** Window event ChatPage dispatches after every successful load/sync (shared with ChatUnreadContext). */
+export const CHAT_SYNC_EVENT = 'hibr:chat-sync';
+
 /**
  * In-memory snapshot of the chat page, keyed by user id.
  *
