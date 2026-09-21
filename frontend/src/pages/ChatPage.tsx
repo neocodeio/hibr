@@ -19,7 +19,7 @@ import {
   subscribeMyChat,
 } from '../lib/chat';
 import { encryptForPeer, decryptFromPeer, cryptoAvailable } from '../lib/chatCrypto';
-import { getChatSnapshot, setChatSnapshot } from '../lib/chatCache';
+import { getChatSnapshot, setChatSnapshot, CHAT_SEEN_PREFIX, CHAT_SEEN_EVENT } from '../lib/chatCache';
 import type { PublicJwk } from '../lib/chatCrypto';
 import type { ChatConversation, ChatMessageRow, ChatPeer } from '../lib/chat';
 import './ChatPage.css';
@@ -27,7 +27,7 @@ import './ChatPage.css';
 const MAX_MESSAGE_LENGTH = 2000;
 const POLL_MS = 15000;
 const NEAR_BOTTOM_PX = 140;
-const SEEN_PREFIX = 'hibr:chat-seen:';
+const SEEN_PREFIX = CHAT_SEEN_PREFIX;
 
 /* ── helpers ─────────────────────────────────────────────── */
 
@@ -387,6 +387,8 @@ function ChatPage() {
         const next = { ...prev, [convId]: stamp };
         try {
           localStorage.setItem(`${SEEN_PREFIX}${user.id}`, JSON.stringify(next));
+          // Tell the app-wide chat badge (ChatUnreadContext) to recount.
+          window.dispatchEvent(new Event(CHAT_SEEN_EVENT));
         } catch {
           // ignore
         }

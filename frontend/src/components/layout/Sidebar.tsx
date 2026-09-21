@@ -17,6 +17,7 @@ import {
 } from 'hugeicons-react';
 import { useAuth } from '../../lib/AuthContext';
 import { useSocial } from '../../lib/SocialContext';
+import { useChatUnread } from '../../lib/ChatUnreadContext';
 import { useTheme } from '../../lib/ThemeProvider';
 import { useMediaQuery } from '../../lib/useMediaQuery';
 import Button from '../ui/Button';
@@ -42,6 +43,7 @@ function Sidebar() {
     signOut,
   } = useAuth();
   const { unreadCount, notificationsOn } = useSocial();
+  const chatUnread = useChatUnread();
   const [query, setQuery] = useState('');
   const [brokenAvatarUrl, setBrokenAvatarUrl] = useState<string | null>(null);
   const [isMoreOpen, setIsMoreOpen] = useState(false);
@@ -138,6 +140,11 @@ function Sidebar() {
             <NavLink to="/chat" className={linkClass}>
               <Message01Icon size={20} strokeWidth={1.75} aria-hidden="true" />
               <span>الرسائل</span>
+              {chatUnread > 0 && (
+                <span className="sidebar__badge" aria-hidden="true">
+                  {chatUnread > 9 ? '9+' : chatUnread}
+                </span>
+              )}
             </NavLink>
           )}
           {isAuthenticated && notificationsOn && (

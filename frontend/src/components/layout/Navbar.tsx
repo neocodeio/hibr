@@ -21,6 +21,7 @@ import {
 import { useTheme } from '../../lib/ThemeProvider';
 import { useAuth } from '../../lib/AuthContext';
 import { useSocial } from '../../lib/SocialContext';
+import { useChatUnread } from '../../lib/ChatUnreadContext';
 import './Navbar.css';
 
 function Navbar() {
@@ -34,6 +35,7 @@ function Navbar() {
   } = useAuth();
   const { openUserProfile } = useClerk();
   const { unreadCount, notificationsOn } = useSocial();
+  const chatUnread = useChatUnread();
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -192,9 +194,14 @@ function Navbar() {
             <Link
               to="/chat"
               className="navbar__bell"
-              aria-label="الرسائل المشفرة"
+              aria-label={chatUnread > 0 ? `الرسائل — ${chatUnread} غير مقروءة` : 'الرسائل المشفرة'}
             >
               <Message01Icon size={18} strokeWidth={1.75} />
+              {chatUnread > 0 && (
+                <span className="navbar__bell-badge" aria-hidden="true">
+                  {chatUnread > 9 ? '9+' : chatUnread}
+                </span>
+              )}
             </Link>
           )}
 

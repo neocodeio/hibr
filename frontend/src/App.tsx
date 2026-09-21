@@ -21,6 +21,7 @@ import { getPostPath } from './lib/posts';
 import { notifyPostCreated } from './lib/postEvents';
 import { PostsProvider } from './lib/PostsContext';
 import { SocialProvider } from './lib/SocialContext';
+import { ChatUnreadProvider } from './lib/ChatUnreadContext';
 import type { Post } from './types';
 
 // Mounted once inside the Router + Auth providers so the composer works
@@ -55,7 +56,9 @@ function AppShell({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   return (
     <PostsProvider>
-      <SocialProvider key={user?.id ?? 'guest'}>{children}</SocialProvider>
+      <SocialProvider key={user?.id ?? 'guest'}>
+        <ChatUnreadProvider>{children}</ChatUnreadProvider>
+      </SocialProvider>
     </PostsProvider>
   );
 }

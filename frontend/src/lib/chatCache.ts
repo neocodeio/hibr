@@ -18,6 +18,12 @@ export interface ChatSnapshot {
   loadedThreads: string[];
 }
 
+/** localStorage key prefix for per-user chat read-marks (shared with ChatPage). */
+export const CHAT_SEEN_PREFIX = 'hibr:chat-seen:';
+
+/** Window event ChatPage dispatches after marking threads read (shared with ChatUnreadContext). */
+export const CHAT_SEEN_EVENT = 'hibr:chat-seen-changed';
+
 /**
  * In-memory snapshot of the chat page, keyed by user id.
  *
