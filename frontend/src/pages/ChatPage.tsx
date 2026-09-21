@@ -137,6 +137,7 @@ function ChatPage() {
   const [startingPeer, setStartingPeer] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [retryingId, setRetryingId] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<{ id: string; timer: number } | null>(null);
   const [seen, setSeen] = useState<Record<string, string>>(() => cached?.seen ?? {});
   const [liveStatus, setLiveStatus] = useState<LiveStatus>('connecting');
@@ -299,6 +300,63 @@ function ChatPage() {
       return { ...prev, [convId]: [...current, ...fresh].sort((a, b) => +new Date(a.created_at) - +new Date(b.created_at)) };
     });
   }, []);
+
+  /* ── manual retry for a broken message: refetch the peer's CURRENT key
+     from the server (bypassing any stale cached key) and try once. ── */
+  const retryDecrypt = useCallback(
+    async (convId: string, messageId: string) => {
+      if (!identity || retryingId) return;
+      const conv = conversationsRef.current.find((c) => c.id === convId);
+      const row = messagesByConvRef.current[convId]?.find((m) => m.id === messageId);
+      if (!conv || !row) return;
+      setRetryingId(messageId);
+      try {
+        const token = await getSupabaseToken();
+        const freshKey = await getPeerPublicKey(conv.peer.id, token);
+        if (!freshKey) return;
+        setConversations((prev) =>
+          prev.map((c) =>
+            c.id === convId ? { ...c, peer: { ...c.peer, publicKey: freshKey } } : c
+          )
+        );
+        const text = await decryptFromPeer(
+          { ciphertext: row.ciphertext, iv: row.iv },
+          identity.privateKey,
+          freshKey
+        );
+        setPlaintext((prev) => ({ ...prev, [messageId]: text }));
+        setUndecryptable((prev) => {
+          if (!prev.has(messageId)) return prev;
+          const next = new Set(prev);
+          next.delete(messageId);
+          return next;
+        });
+      } catch {
+        // Still broken (key rotation / other device) — stays marked.
+      } finally {
+        setRetryingId(null);
+      }
+    },
+    [identity, retryingId, getSupabaseToken]
+  );
+
+  /* ── auto-heal: whenever a conversation's peer key arrives or CHANGES
+     (e.g. a background sync fetched a rotated key), retry that thread's
+     broken messages once with it. Fingerprint-guarded so a permanently
+     broken message is never retried in a loop. ── */
+  const healedKeysRef = useRef<Record<string, string>>({});
+  useEffect(() => {
+    if (!identity || !user) return;
+    for (const conv of conversations) {
+      if (!conv.peer.publicKey) continue;
+      const fingerprint = `${conv.peer.publicKey.x}.${conv.peer.publicKey.y}`;
+      if (healedKeysRef.current[conv.id] === fingerprint) continue;
+      healedKeysRef.current[conv.id] = fingerprint;
+      const broken = (messagesByConv[conv.id] ?? []).filter((m) => undecryptable.has(m.id));
+      if (broken.length === 0) continue;
+      void decryptRows(broken, conv.peer.publicKey, identity.privateKey);
+    }
+  }, [conversations, messagesByConv, undecryptable, identity, user, decryptRows]);
 
   /* ── 1. probe ── */
   useEffect(() => {
@@ -1169,7 +1227,17 @@ function ChatPage() {
                           <div key={msg.id} className={`chat__msg${mine ? ' chat__msg--mine' : ''}${grouped ? ' chat__msg--grouped' : ''}`}>
                             <div className="chat__bubble">
                               {broken || text === undefined ? (
-                                <span className="chat__undecryptable">تعذر فك تشفير هذه الرسالة على هذا الجهاز.</span>
+                                <span className="chat__broken">
+                                  <span className="chat__undecryptable">تعذر فك تشفير هذه الرسالة على هذا الجهاز.</span>
+                                  <button
+                                    type="button"
+                                    className="chat__retry"
+                                    onClick={() => void retryDecrypt(msg.conversation_id, msg.id)}
+                                    disabled={retryingId === msg.id}
+                                  >
+                                    {retryingId === msg.id ? 'جارٍ المحاولة...' : 'إعادة المحاولة'}
+                                  </button>
+                                </span>
                               ) : (
                                 <span className="chat__text">{text}</span>
                               )}
