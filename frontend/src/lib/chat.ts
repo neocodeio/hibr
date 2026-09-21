@@ -26,6 +26,19 @@ export interface ChatMessageRow {
   created_at: string;
 }
 
+/** Escape user text for a PostgREST `like/ilike` pattern (%, _, ,, (, ) break `or=`). */
+function sanitizeLike(raw: string): string {
+  return raw
+    .replace(/\\/g, '\\\\')
+    .replace(/%/g, '\\%')
+    .replace(/_/g, '\\_')
+    .replace(/,/g, '')
+    .replace(/[()]/g, '')
+    .replace(/"/g, '')
+    .replace(/;/g, '')
+    .trim();
+}
+
 function toPeer(row: {
   id: string;
   name?: string | null;
@@ -98,7 +111,7 @@ export async function searchChatUsers(
   myId: string,
   token: string | null
 ): Promise<ChatPeer[]> {
-  const q = query.trim();
+  const q = sanitizeLike(query);
   if (q.length < 1) return [];
   try {
     const client = getSupabaseClient(token);
@@ -246,6 +259,50 @@ export async function listMessages(conversationId: string, token: string | null)
   return data as ChatMessageRow[];
 }
 
+/** Latest messages across my conversations in ONE query (previews + unread). */
+export async function listRecentMessages(
+  conversationIds: string[],
+  token: string | null,
+  limit = 120
+): Promise<ChatMessageRow[]> {
+  if (conversationIds.length === 0) return [];
+  try {
+    const client = getSupabaseClient(token);
+    const { data, error } = await client
+      .from('messages')
+      .select('id,conversation_id,sender_id,ciphertext,iv,created_at')
+      .in('conversation_id', conversationIds.slice(0, 200))
+      .order('created_at', { ascending: false })
+      .limit(limit);
+    if (error || !data) return [];
+    return (data as ChatMessageRow[]).slice().reverse();
+  } catch {
+    return [];
+  }
+}
+
+/** Messages in one thread created after `afterIso` (realtime gap-fill / polling). */
+export async function listMessagesAfter(
+  conversationId: string,
+  afterIso: string,
+  token: string | null
+): Promise<ChatMessageRow[]> {
+  try {
+    const client = getSupabaseClient(token);
+    const { data, error } = await client
+      .from('messages')
+      .select('id,conversation_id,sender_id,ciphertext,iv,created_at')
+      .eq('conversation_id', conversationId)
+      .gt('created_at', afterIso)
+      .order('created_at', { ascending: true })
+      .limit(100);
+    if (error || !data) return [];
+    return data as ChatMessageRow[];
+  } catch {
+    return [];
+  }
+}
+/** Send one E2EE message (ciphertext only ever touches the server). */
 export async function sendEncryptedMessage(
   conversationId: string,
   senderId: string,
@@ -270,12 +327,79 @@ export async function deleteMessage(messageId: string, token: string | null): Pr
   if (error) throw new Error(error.message || 'تعذر حذف الرسالة');
 }
 
-/** Live inserts for one conversation. Returns an unsubscribe function. */
+export interface ChatLiveHandlers {
+  onInsert: (row: ChatMessageRow) => void;
+  onDelete?: (row: { id: string; conversation_id: string }) => void;
+  onConversationsChanged?: () => void;
+  onStatus?: (status: 'live' | 'connecting' | 'offline') => void;
+}
+
+/**
+ * Global live feed for ALL of my conversations.
+ *
+ * MUST use the authenticated client (Clerk JWT): the old code subscribed
+ * with the anon key, and RLS silently dropped every private-message event —
+ * that is why "messages are not realtime". No per-conversation filter is
+ * used on purpose: RLS already scopes events to conversations I belong to,
+ * and one channel covers new DMs created by the peer too.
+ */
+export function subscribeMyChat(token: string | null, handlers: ChatLiveHandlers): () => void {
+  const client = getSupabaseClient(token);
+  const channel = client
+    .channel('chat:my-feed')
+    .on(
+      'postgres_changes',
+      { event: 'INSERT', schema: 'public', table: 'messages' },
+      (payload) => {
+        handlers.onInsert(payload.new as ChatMessageRow);
+      }
+    )
+    .on(
+      'postgres_changes',
+      { event: 'DELETE', schema: 'public', table: 'messages' },
+      (payload) => {
+        const old = payload.old as { id?: string; conversation_id?: string };
+        if (old?.id) handlers.onDelete?.({ id: old.id, conversation_id: old.conversation_id ?? '' });
+      }
+    )
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'conversations' },
+      () => {
+        handlers.onConversationsChanged?.();
+      }
+    )
+    .on(
+      'postgres_changes',
+      { event: 'INSERT', schema: 'public', table: 'conversation_participants' },
+      () => {
+        handlers.onConversationsChanged?.();
+      }
+    )
+    .subscribe((status) => {
+      if (status === 'SUBSCRIBED') handlers.onStatus?.('live');
+      else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+        handlers.onStatus?.('offline');
+      } else {
+        handlers.onStatus?.('connecting');
+      }
+    });
+  return () => {
+    void client.removeChannel(channel);
+  };
+}
+
+/**
+ * Live inserts for one conversation (authenticated — RLS applies).
+ * Kept for compatibility; prefer {@link subscribeMyChat} for the full feed.
+ */
 export function subscribeConversationMessages(
   conversationId: string,
-  onInsert: (row: ChatMessageRow) => void
+  onInsert: (row: ChatMessageRow) => void,
+  token?: string | null
 ): () => void {
-  const channel = supabase
+  const client = token ? getSupabaseClient(token) : supabase;
+  const channel = client
     .channel(`chat:${conversationId}`)
     .on(
       'postgres_changes',
@@ -286,6 +410,6 @@ export function subscribeConversationMessages(
     )
     .subscribe();
   return () => {
-    void supabase.removeChannel(channel);
+    void client.removeChannel(channel);
   };
 }

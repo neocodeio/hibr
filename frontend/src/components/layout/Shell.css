@@ -62,3 +62,32 @@
     max-width: 100%;
   }
 }
+
+/* ============================================================
+   Chat page — the suggestions rail (.rail) is hidden and the
+   center column expands to fill ALL freed space (edge to edge
+   with the nav sidebar). Nav sidebar is untouched. Below
+   1300px the rail never mounts anyway.
+   ============================================================ */
+@media (min-width: 1024px) {
+  .shell--chat {
+    /* Stretch children so the chat card fills viewport height */
+    align-items: stretch;
+  }
+
+  .shell--chat .shell__main {
+    flex: 1 1 auto;
+    width: auto;
+    min-width: 0;
+    max-width: none;
+    margin-inline: 0;
+  }
+}
+
+@media (min-width: 1300px) {
+  /* display:none (not unmount) so the rail keeps its state and
+     never refetches when navigating back from /chat. */
+  .shell--chat .rail {
+    display: none;
+  }
+}

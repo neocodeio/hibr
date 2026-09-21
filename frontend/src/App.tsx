@@ -60,6 +60,14 @@ function AppShell({ children }: { children: ReactNode }) {
   );
 }
 
+// Adds .shell--chat on /chat so the suggestions rail hides and the chat
+// card stretches into the freed space. The nav sidebar stays untouched.
+function ShellFrame({ children }: { children: ReactNode }) {
+  const location = useLocation();
+  const isChat = location.pathname === '/chat';
+  return <div className={isChat ? 'shell shell--chat' : 'shell'}>{children}</div>;
+}
+
 function App() {
   return (
     <BrowserRouter>
@@ -67,7 +75,7 @@ function App() {
         <AuthProvider>
           <AppShell>
             <Navbar />
-            <div className="shell">
+            <ShellFrame>
               <Sidebar />
               <div className="shell__main">
                 <Routes>
@@ -84,7 +92,7 @@ function App() {
                 </Routes>
               </div>
               <RightRail />
-            </div>
+            </ShellFrame>
             {/* <Footer /> */}
             <AuthModal />
             <GlobalCreatePostModal />
